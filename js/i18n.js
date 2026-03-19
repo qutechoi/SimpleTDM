@@ -117,7 +117,9 @@ export const translations = {
         dataSaved: 'Patient data saved successfully.',
         dataLoaded: 'Patient data loaded successfully.',
         noSavedData: 'No saved patient data found.',
-        confirmLoad: 'Load saved patient data? Current values will be overwritten.'
+        confirmLoad: 'Load saved patient data? Current values will be overwritten.',
+        resetData: 'Reset',
+        confirmReset: 'Reset all fields? All entered data will be cleared.'
     },
     ko: {
         title: '반코마이신 TDM 계산기',
@@ -235,7 +237,9 @@ export const translations = {
         dataSaved: '환자 데이터가 저장되었습니다.',
         dataLoaded: '환자 데이터를 불러왔습니다.',
         noSavedData: '저장된 환자 데이터가 없습니다.',
-        confirmLoad: '저장된 환자 데이터를 불러오시겠습니까? 현재 값이 덮어씌워집니다.'
+        confirmLoad: '저장된 환자 데이터를 불러오시겠습니까? 현재 값이 덮어씌워집니다.',
+        resetData: '초기화',
+        confirmReset: '모든 입력을 초기화하시겠습니까? 입력된 데이터가 모두 삭제됩니다.'
     }
 };
 

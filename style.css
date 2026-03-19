@@ -946,6 +946,11 @@ input:-webkit-autofill:active {
     flex-shrink: 0;
 }
 
+.action-btn--danger:hover {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
 /* Print Styles */
 @media print {
     body {

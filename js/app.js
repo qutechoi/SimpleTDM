@@ -551,6 +551,25 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(t.dataLoaded);
     }
 
+    function resetPatientData() {
+        const t = getT();
+        if (!confirm(t.confirmReset)) return;
+
+        for (const input of Object.values(inputs)) {
+            input.value = '';
+        }
+
+        const container = document.getElementById('measurementsContainer');
+        container.innerHTML = '';
+        const firstEntry = createMeasurementEntry(0);
+        container.appendChild(firstEntry);
+
+        document.getElementById('resultsSection').style.display = 'none';
+        document.getElementById('recommendationText').textContent = t.recommendationPlaceholder;
+
+        updatePediatricHint();
+    }
+
     // Event Listeners
     document.getElementById('addMeasurementBtn').addEventListener('click', addMeasurement);
     document.getElementById('simulateBtn').addEventListener('click', simulateDose);
@@ -558,6 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('saveDataBtn').addEventListener('click', savePatientData);
     document.getElementById('loadDataBtn').addEventListener('click', loadPatientData);
     document.getElementById('printBtn').addEventListener('click', () => window.print());
+    document.getElementById('resetBtn').addEventListener('click', resetPatientData);
 
     themeToggle.addEventListener('click', () => {
         currentTheme = currentTheme === 'light' ? 'dark' : 'light';
