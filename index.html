@@ -77,6 +77,12 @@
                 </svg>
                 <span data-i18n="printResults">Print</span>
             </button>
+            <button id="historyBtn" class="action-btn" title="View history" aria-label="View calculation history">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span data-i18n="historyBtn">History</span>
+            </button>
             <button id="resetBtn" class="action-btn action-btn--danger" title="Reset all fields" aria-label="Reset all fields">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -265,6 +271,48 @@
                 <span data-i18n="disclaimerAgree">I understand and agree that this is for educational purposes only</span>
             </label>
             <button id="disclaimerAcceptBtn" class="btn-primary" disabled data-i18n="disclaimerAccept">Accept & Continue</button>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="historyModal" class="modal-overlay hidden" role="dialog" aria-labelledby="historyTitle">
+        <div class="modal-content modal-content--wide">
+            <div class="history-header">
+                <h2 id="historyTitle" data-i18n="historyTitle">Calculation History</h2>
+                <button id="historyCloseBtn" class="modal-close-btn" aria-label="Close">×</button>
+            </div>
+            <div class="history-filter">
+                <label>
+                    <span data-i18n="historyFrom">From</span>
+                    <input type="date" id="historyFrom">
+                </label>
+                <label>
+                    <span data-i18n="historyTo">To</span>
+                    <input type="date" id="historyTo">
+                </label>
+                <button id="historyApplyBtn" class="btn-secondary" data-i18n="historyApply">Apply</button>
+                <button id="historyResetFilterBtn" class="btn-secondary" data-i18n="historyResetFilter">All</button>
+            </div>
+            <div class="history-summary" id="historySummary"></div>
+            <div class="history-table-wrap">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="historyColDate">Date/Time</th>
+                            <th data-i18n="historyColPatient">Patient</th>
+                            <th data-i18n="historyColRegimen">Regimen</th>
+                            <th data-i18n="historyColAuc">AUC24</th>
+                            <th data-i18n="historyColTrough">Trough</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody"></tbody>
+                </table>
+            </div>
+            <div class="history-footer">
+                <button id="historyExportBtn" class="btn-primary" data-i18n="historyExport">Export CSV</button>
+                <button id="historyClearBtn" class="btn-secondary btn-danger" data-i18n="historyClear">Clear All</button>
+            </div>
         </div>
     </div>
 

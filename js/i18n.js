@@ -119,7 +119,25 @@ export const translations = {
         noSavedData: 'No saved patient data found.',
         confirmLoad: 'Load saved patient data? Current values will be overwritten.',
         resetData: 'Reset',
-        confirmReset: 'Reset all fields? All entered data will be cleared.'
+        confirmReset: 'Reset all fields? All entered data will be cleared.',
+        historyBtn: 'History',
+        historyTitle: 'Calculation History',
+        historyFrom: 'From',
+        historyTo: 'To',
+        historyApply: 'Apply',
+        historyResetFilter: 'All',
+        historyColDate: 'Date/Time',
+        historyColPatient: 'Patient',
+        historyColRegimen: 'Regimen',
+        historyColAuc: 'AUC24',
+        historyColTrough: 'Trough',
+        historyExport: 'Export CSV',
+        historyClear: 'Clear All',
+        historyCount: 'Records',
+        historyEmpty: 'No records in the selected range.',
+        historyConfirmDelete: 'Delete this record?',
+        historyConfirmClear: 'Delete ALL history? This cannot be undone.',
+        historyNothingToExport: 'No records to export.'
     },
     ko: {
         title: '반코마이신 TDM 계산기',
@@ -239,7 +257,25 @@ export const translations = {
         noSavedData: '저장된 환자 데이터가 없습니다.',
         confirmLoad: '저장된 환자 데이터를 불러오시겠습니까? 현재 값이 덮어씌워집니다.',
         resetData: '초기화',
-        confirmReset: '모든 입력을 초기화하시겠습니까? 입력된 데이터가 모두 삭제됩니다.'
+        confirmReset: '모든 입력을 초기화하시겠습니까? 입력된 데이터가 모두 삭제됩니다.',
+        historyBtn: '기록',
+        historyTitle: '계산 기록',
+        historyFrom: '시작일',
+        historyTo: '종료일',
+        historyApply: '적용',
+        historyResetFilter: '전체',
+        historyColDate: '일시',
+        historyColPatient: '환자',
+        historyColRegimen: '용법',
+        historyColAuc: 'AUC24',
+        historyColTrough: 'Trough',
+        historyExport: 'CSV 내보내기',
+        historyClear: '전체 삭제',
+        historyCount: '건수',
+        historyEmpty: '선택한 기간에 기록이 없습니다.',
+        historyConfirmDelete: '이 기록을 삭제하시겠습니까?',
+        historyConfirmClear: '모든 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.',
+        historyNothingToExport: '내보낼 기록이 없습니다.'
     }
 };
 

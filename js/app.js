@@ -5,6 +5,7 @@ import { calculatePopulationPK, calculatePeakSS, calculateTroughSS, calculateAUC
 import { multiPointBayesianFit } from './bayesian-fitting.js';
 import { updateChartExtended, updateChartTheme, updateChartLanguage } from './chart.js';
 import { validateAllInputs, setupRealtimeValidation } from './validation.js';
+import { appendHistory, getHistory, filterByDateRange, deleteHistory, clearHistory, exportToCsv } from './history.js';
 
 let currentTheme = localStorage.getItem('theme') || 'light';
 let individualizedPK = null;
@@ -274,6 +275,31 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('resultsSection').appendChild(watermark);
         }
         watermark.textContent = t.resultsWatermark;
+
+        // Save to history
+        appendHistory({
+            patient: {
+                ageYears, ageMonths, sex, height, weight, scr,
+                pediatric: popPK.pediatric
+            },
+            dosing: {
+                dose, interval,
+                startTime: inputs.startTime.value
+            },
+            measurements: measurements.map(m => ({
+                time: m.time.toISOString(),
+                concentration: m.concentration
+            })),
+            results: {
+                auc24, trough: troughSS, peakSS, cl, halfLife, kel, vd,
+                crcl: popPK.crcl,
+                fitQuality: {
+                    rSquared: fitQuality.rSquared,
+                    rmse: fitQuality.rmse,
+                    measurementCount: fitQuality.measurementCount
+                }
+            }
+        });
     }
 
     // ==========================================
@@ -570,6 +596,103 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePediatricHint();
     }
 
+    // ==========================================
+    // History Modal
+    // ==========================================
+    const historyModal = document.getElementById('historyModal');
+    const historyFrom = document.getElementById('historyFrom');
+    const historyTo = document.getElementById('historyTo');
+    const historyTableBody = document.getElementById('historyTableBody');
+    const historySummary = document.getElementById('historySummary');
+
+    function currentFilteredRecords() {
+        const from = historyFrom.value || null;
+        const to = historyTo.value || null;
+        if (!from && !to) return getHistory();
+        return filterByDateRange(from, to);
+    }
+
+    function formatTs(iso) {
+        const d = new Date(iso);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function renderHistoryTable() {
+        const t = getT();
+        const records = currentFilteredRecords().slice().reverse();
+        historySummary.textContent = `${t.historyCount}: ${records.length}`;
+
+        if (records.length === 0) {
+            historyTableBody.innerHTML = `<tr><td colspan="6" class="history-empty">${t.historyEmpty}</td></tr>`;
+            return;
+        }
+
+        historyTableBody.innerHTML = records.map(r => {
+            const p = r.patient || {};
+            const d = r.dosing || {};
+            const res = r.results || {};
+            const ageLabel = p.pediatric && p.ageMonths
+                ? `${p.ageYears}y${p.ageMonths}m`
+                : `${p.ageYears}y`;
+            return `
+                <tr>
+                    <td>${formatTs(r.timestamp)}</td>
+                    <td>${ageLabel} / ${p.sex === 'male' ? 'M' : 'F'} / ${p.weight}kg</td>
+                    <td>${d.dose}mg q${d.interval}h</td>
+                    <td>${typeof res.auc24 === 'number' ? res.auc24.toFixed(1) : '-'}</td>
+                    <td>${typeof res.trough === 'number' ? res.trough.toFixed(1) : '-'}</td>
+                    <td><button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function openHistoryModal() {
+        historyModal.classList.remove('hidden');
+        renderHistoryTable();
+    }
+
+    function closeHistoryModal() {
+        historyModal.classList.add('hidden');
+    }
+
+    historyTableBody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.history-delete-btn');
+        if (!btn) return;
+        const t = getT();
+        if (!confirm(t.historyConfirmDelete)) return;
+        deleteHistory(btn.dataset.id);
+        renderHistoryTable();
+    });
+
+    document.getElementById('historyApplyBtn').addEventListener('click', renderHistoryTable);
+    document.getElementById('historyResetFilterBtn').addEventListener('click', () => {
+        historyFrom.value = '';
+        historyTo.value = '';
+        renderHistoryTable();
+    });
+    document.getElementById('historyExportBtn').addEventListener('click', () => {
+        const t = getT();
+        const records = currentFilteredRecords();
+        if (records.length === 0) {
+            alert(t.historyNothingToExport);
+            return;
+        }
+        const stamp = new Date().toISOString().slice(0, 10);
+        exportToCsv(records, `tdm_history_${stamp}.csv`);
+    });
+    document.getElementById('historyClearBtn').addEventListener('click', () => {
+        const t = getT();
+        if (!confirm(t.historyConfirmClear)) return;
+        clearHistory();
+        renderHistoryTable();
+    });
+    document.getElementById('historyCloseBtn').addEventListener('click', closeHistoryModal);
+    historyModal.addEventListener('click', (e) => {
+        if (e.target === historyModal) closeHistoryModal();
+    });
+
     // Event Listeners
     document.getElementById('addMeasurementBtn').addEventListener('click', addMeasurement);
     document.getElementById('simulateBtn').addEventListener('click', simulateDose);
@@ -578,6 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loadDataBtn').addEventListener('click', loadPatientData);
     document.getElementById('printBtn').addEventListener('click', () => window.print());
     document.getElementById('resetBtn').addEventListener('click', resetPatientData);
+    document.getElementById('historyBtn').addEventListener('click', openHistoryModal);
 
     themeToggle.addEventListener('click', () => {
         currentTheme = currentTheme === 'light' ? 'dark' : 'light';

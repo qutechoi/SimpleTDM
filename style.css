@@ -951,6 +951,148 @@ input:-webkit-autofill:active {
     border-color: #ef4444;
 }
 
+/* History Modal */
+.modal-content--wide {
+    max-width: 900px;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--border-color);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.history-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-main);
+    border-bottom: none;
+}
+
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+}
+
+.modal-close-btn:hover { color: var(--text-main); }
+
+.history-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: end;
+    margin-bottom: 0.75rem;
+}
+
+.history-filter label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    gap: 0.25rem;
+}
+
+.history-filter input[type="date"] {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--card-bg);
+    color: var(--text-main);
+    font-size: 0.85rem;
+}
+
+.history-filter button {
+    padding: 0.45rem 0.9rem;
+    font-size: 0.8rem;
+}
+
+.history-summary {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.history-table-wrap {
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    flex: 1 1 auto;
+    min-height: 200px;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.history-table th,
+.history-table td {
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.history-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--card-bg);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.history-table tbody tr:hover {
+    background: rgba(14, 165, 233, 0.06);
+}
+
+.history-empty {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+}
+
+.history-delete-btn {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: var(--radius-sm);
+}
+
+.history-delete-btn:hover { background: rgba(239, 68, 68, 0.12); }
+
+.history-footer {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.history-footer .btn-danger {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+.history-footer .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
 /* Print Styles */
 @media print {
     body {

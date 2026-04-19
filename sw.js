@@ -1,5 +1,5 @@
 // Service Worker for offline PWA support
-const CACHE_NAME = 'vanco-tdm-v1';
+const CACHE_NAME = 'vanco-tdm-v2';
 const ASSETS = [
     './',
     './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
     './js/bayesian-fitting.js',
     './js/validation.js',
     './js/chart.js',
+    './js/history.js',
     './manifest.json'
 ];
 
