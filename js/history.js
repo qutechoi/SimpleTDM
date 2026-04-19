@@ -43,14 +43,32 @@ export function filterByDateRange(from, to) {
     });
 }
 
-const CSV_COLUMNS = [
-    'Timestamp', 'AgeYears', 'AgeMonths', 'Sex', 'Pediatric',
-    'Height_cm', 'Weight_kg', 'SCr_mg_dL',
-    'Dose_mg', 'Interval_h', 'FirstDoseTime', 'MeasurementCount',
-    'AUC24', 'Trough_mg_L', 'Peak_mg_L', 'Clearance_L_h',
-    'HalfLife_h', 'Kel_per_h', 'Vd_L', 'CrCl_mL_min',
-    'R_squared', 'RMSE'
-];
+const CSV_LOCALES = {
+    en: {
+        headers: [
+            'Timestamp', 'AgeYears', 'AgeMonths', 'Sex', 'Pediatric',
+            'Height_cm', 'Weight_kg', 'SCr_mg_dL',
+            'Dose_mg', 'Interval_h', 'FirstDoseTime', 'MeasurementCount',
+            'AUC24', 'Trough_mg_L', 'Peak_mg_L', 'Clearance_L_h',
+            'HalfLife_h', 'Kel_per_h', 'Vd_L', 'CrCl_mL_min',
+            'R_squared', 'RMSE'
+        ],
+        sex: { male: 'male', female: 'female' },
+        pediatric: { true: 'yes', false: 'no' }
+    },
+    ko: {
+        headers: [
+            '일시', '나이(세)', '나이(개월)', '성별', '환자구분',
+            '키(cm)', '체중(kg)', '혈청크레아티닌(mg/dL)',
+            '용량(mg)', '투약간격(h)', '첫투약시간', '측정횟수',
+            'AUC24', 'Trough(mg/L)', 'Peak(mg/L)', '청소율(L/h)',
+            '반감기(h)', 'Kel(1/h)', 'Vd(L)', 'CrCl(mL/min)',
+            'R제곱', 'RMSE'
+        ],
+        sex: { male: '남', female: '여' },
+        pediatric: { true: '소아', false: '성인' }
+    }
+};
 
 function csvEscape(value) {
     if (value == null) return '';
@@ -58,14 +76,20 @@ function csvEscape(value) {
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function recordToRow(r) {
+function num(v, digits) {
+    return typeof v === 'number' && isFinite(v) ? v.toFixed(digits) : '';
+}
+
+function recordToRow(r, locale) {
     const p = r.patient || {};
     const d = r.dosing || {};
     const res = r.results || {};
     const fq = res.fitQuality || {};
     return [
         r.timestamp,
-        p.ageYears, p.ageMonths ?? '', p.sex, p.pediatric ? 'yes' : 'no',
+        p.ageYears, p.ageMonths ?? '',
+        locale.sex[p.sex] ?? p.sex ?? '',
+        locale.pediatric[p.pediatric ? 'true' : 'false'],
         p.height, p.weight, p.scr,
         d.dose, d.interval, d.startTime, (r.measurements || []).length,
         num(res.auc24, 1), num(res.trough, 1), num(res.peakSS, 1), num(res.cl, 2),
@@ -75,13 +99,10 @@ function recordToRow(r) {
     ];
 }
 
-function num(v, digits) {
-    return typeof v === 'number' && isFinite(v) ? v.toFixed(digits) : '';
-}
-
-export function exportToCsv(records, filename = 'tdm_history.csv') {
-    const header = CSV_COLUMNS.join(',');
-    const rows = records.map(r => recordToRow(r).map(csvEscape).join(','));
+export function exportToCsv(records, filename = 'tdm_history.csv', lang = 'en') {
+    const locale = CSV_LOCALES[lang] || CSV_LOCALES.en;
+    const header = locale.headers.join(',');
+    const rows = records.map(r => recordToRow(r, locale).map(csvEscape).join(','));
     const csv = '\uFEFF' + [header, ...rows].join('\r\n');
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

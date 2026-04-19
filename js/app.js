@@ -682,7 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const stamp = new Date().toISOString().slice(0, 10);
-        exportToCsv(records, `tdm_history_${stamp}.csv`);
+        exportToCsv(records, `tdm_history_${stamp}.csv`, getLang());
     });
     document.getElementById('historyClearBtn').addEventListener('click', () => {
         const t = getT();
