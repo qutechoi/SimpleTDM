@@ -51,10 +51,12 @@ const CSV_LOCALES = {
             'Dose_mg', 'Interval_h', 'FirstDoseTime', 'MeasurementCount',
             'AUC24', 'Trough_mg_L', 'Peak_mg_L', 'Clearance_L_h',
             'HalfLife_h', 'Kel_per_h', 'Vd_L', 'CrCl_mL_min',
-            'R_squared', 'RMSE'
+            'R_squared', 'RMSE', 'Effectiveness', 'Toxicity'
         ],
         sex: { male: 'male', female: 'female' },
-        pediatric: { true: 'yes', false: 'no' }
+        pediatric: { true: 'yes', false: 'no' },
+        effectiveness: { good: 'Good', low: 'Low' },
+        toxicity: { low: 'Low', high: 'High' }
     },
     ko: {
         headers: [
@@ -63,12 +65,24 @@ const CSV_LOCALES = {
             '용량(mg)', '투약간격(h)', '첫투약시간', '측정횟수',
             'AUC24', 'Trough(mg/L)', 'Peak(mg/L)', '청소율(L/h)',
             '반감기(h)', 'Kel(1/h)', 'Vd(L)', 'CrCl(mL/min)',
-            'R제곱', 'RMSE'
+            'R제곱', 'RMSE', '효과예측', '독성평가'
         ],
         sex: { male: '남', female: '여' },
-        pediatric: { true: '소아', false: '성인' }
+        pediatric: { true: '소아', false: '성인' },
+        effectiveness: { good: '양호', low: '저하' },
+        toxicity: { low: '낮음', high: '위험' }
     }
 };
+
+function assessEffectiveness(auc24) {
+    if (!isFinite(auc24)) return null;
+    return auc24 < 400 ? 'low' : 'good';
+}
+
+function assessToxicity(auc24, trough) {
+    if (!isFinite(auc24) || !isFinite(trough)) return null;
+    return (auc24 > 600 || trough > 20) ? 'high' : 'low';
+}
 
 function csvEscape(value) {
     if (value == null) return '';
@@ -85,6 +99,8 @@ function recordToRow(r, locale) {
     const d = r.dosing || {};
     const res = r.results || {};
     const fq = res.fitQuality || {};
+    const effKey = assessEffectiveness(res.auc24);
+    const toxKey = assessToxicity(res.auc24, res.trough);
     return [
         r.timestamp,
         p.ageYears, p.ageMonths ?? '',
@@ -95,7 +111,9 @@ function recordToRow(r, locale) {
         num(res.auc24, 1), num(res.trough, 1), num(res.peakSS, 1), num(res.cl, 2),
         num(res.halfLife, 2), num(res.kel, 5), num(res.vd, 2), num(res.crcl, 1),
         fq.rSquared != null ? fq.rSquared.toFixed(3) : '',
-        num(fq.rmse, 3)
+        num(fq.rmse, 3),
+        effKey ? locale.effectiveness[effKey] : '',
+        toxKey ? locale.toxicity[toxKey] : ''
     ];
 }
 
