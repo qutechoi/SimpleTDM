@@ -3,7 +3,7 @@
 반코마이신 치료적 약물 모니터링(Therapeutic Drug Monitoring) 웹 계산기입니다.
 환자 정보와 실측 혈중 농도를 입력하면 베이지안 방법으로 개인화된 약동학 파라미터를 추정하고, AUC 기반 용량 조절 권장사항을 제공합니다.
 
-**배포 주소**: https://qutechoi.github.io/0319_New_TDM/
+**배포 주소**: https://qutechoi.github.io/SimpleTDM/
 
 ---
 
@@ -103,8 +103,8 @@ Schwartz 공식으로 CrCl 계산: `CrCl = k × 키(cm) / SCr`
 
 ```bash
 # 저장소 클론
-git clone https://github.com/qutechoi/0319_New_TDM.git
-cd 0319_New_TDM
+git clone https://github.com/qutechoi/SimpleTDM.git
+cd SimpleTDM
 
 # 패키지 설치
 npm install
@@ -122,7 +122,7 @@ npm test
 ### 프로젝트 구조
 
 ```
-0319_New_TDM/
+SimpleTDM/
 ├── index.html              # 메인 HTML
 ├── style.css               # 스타일시트
 ├── manifest.json           # PWA 매니페스트

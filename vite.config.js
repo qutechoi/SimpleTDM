@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-    base: '/0319_New_TDM/',
+    base: '/SimpleTDM/',
     root: '.',
     build: {
         outDir: 'dist',
