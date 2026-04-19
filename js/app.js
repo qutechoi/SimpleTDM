@@ -1,6 +1,6 @@
 // app.js - Main Application Entry Point
 
-import { translations, getLang, setLang, t as getT, applyLanguage } from './i18n.js';
+import { getLang, setLang, t as getT, applyLanguage } from './i18n.js';
 import { calculatePopulationPK, calculatePeakSS, calculateTroughSS, calculateAUC24 } from './pk-calculations.js';
 import { multiPointBayesianFit } from './bayesian-fitting.js';
 import { updateChartExtended, updateChartTheme, updateChartLanguage } from './chart.js';
@@ -264,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateChartExtended(peakSS, kel, vd, interval, measurements, startTime, dose, currentTheme, individualizedPK);
         generateSpecificDoseRecommendations(individualizedPK, dose, interval);
 
+        document.getElementById('resultsSection').style.display = 'block';
         document.getElementById('simulationBox').style.display = 'block';
         document.getElementById('doseRecommendationsBox').style.display = 'block';
 
@@ -587,10 +588,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const container = document.getElementById('measurementsContainer');
         container.innerHTML = '';
-        const firstEntry = createMeasurementEntry(0);
-        container.appendChild(firstEntry);
+        container.appendChild(createMeasurementEntry(0));
 
         document.getElementById('resultsSection').style.display = 'none';
+        document.getElementById('simulationBox').style.display = 'none';
+        document.getElementById('doseRecommendationsBox').style.display = 'none';
         document.getElementById('recommendationText').textContent = t.recommendationPlaceholder;
 
         updatePediatricHint();
