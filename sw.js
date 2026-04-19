@@ -1,5 +1,5 @@
 // Service Worker for offline PWA support
-const CACHE_NAME = 'vanco-tdm-v2';
+const CACHE_NAME = 'vanco-tdm-v3';
 const ASSETS = [
     './',
     './index.html',
@@ -35,33 +35,47 @@ self.addEventListener('activate', event => {
     );
 });
 
+function shouldCache(request, url) {
+    if (request.method !== 'GET') return false;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    if (url.hostname.includes('google') || url.hostname.includes('clarity')) return false;
+    return true;
+}
+
 // Fetch: network-first for CDN resources, cache-first for local assets
 self.addEventListener('fetch', event => {
-    const url = new URL(event.request.url);
+    const { request } = event;
+    const url = new URL(request.url);
+
+    // Skip non-GET and non-http(s) schemes (chrome-extension, etc.)
+    if (request.method !== 'GET' || (url.protocol !== 'http:' && url.protocol !== 'https:')) {
+        return;
+    }
 
     // Network-first for CDN resources (Chart.js, fonts, analytics)
     if (url.origin !== location.origin) {
         event.respondWith(
-            fetch(event.request)
+            fetch(request)
                 .then(response => {
-                    // Cache CDN resources on success
-                    if (response.ok && !url.hostname.includes('google') && !url.hostname.includes('clarity')) {
+                    if (response.ok && shouldCache(request, url)) {
                         const clone = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
                     }
                     return response;
                 })
-                .catch(() => caches.match(event.request))
+                .catch(() => caches.match(request))
         );
         return;
     }
 
     // Cache-first for local assets
     event.respondWith(
-        caches.match(event.request)
-            .then(cached => cached || fetch(event.request).then(response => {
-                const clone = response.clone();
-                caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        caches.match(request)
+            .then(cached => cached || fetch(request).then(response => {
+                if (response.ok && shouldCache(request, url)) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
+                }
                 return response;
             }))
     );
