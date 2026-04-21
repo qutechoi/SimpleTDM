@@ -117,13 +117,29 @@ function recordToRow(r, locale) {
     ];
 }
 
-export function exportToCsv(records, filename = 'tdm_history.csv', lang = 'en') {
+export async function exportToCsv(records, filename = 'tdm_history.csv', lang = 'en') {
     const locale = CSV_LOCALES[lang] || CSV_LOCALES.en;
     const header = locale.headers.join(',');
     const rows = records.map(r => recordToRow(r, locale).map(csvEscape).join(','));
     const csv = '\uFEFF' + [header, ...rows].join('\r\n');
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const file = new File([blob], filename, { type: 'text/csv;charset=utf-8' });
+
+    // On mobile, the OS share sheet surfaces KakaoTalk (and other messaging
+    // apps) as a target. Kakao has no public web-SDK for sending files, so
+    // routing through the native share sheet is the only viable path.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({ files: [file], title: filename, text: filename });
+            return;
+        } catch (err) {
+            // User dismissed the sheet — don't silently re-download behind their back.
+            if (err.name === 'AbortError') return;
+            // Other failures fall through to the download fallback below.
+        }
+    }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
