@@ -165,21 +165,52 @@ export function calculatePediatricPK(age, sex, height, weight, scr) {
 }
 
 /**
- * Predict concentration at a given time considering dose accumulation
+ * Enumerate every individual dose event implied by a sequence of dosing regimens.
+ * Each regimen contributes doses at startTime, startTime + interval, ... up to
+ * (but not including) the next regimen's startTime, or untilTime for the last.
+ *
+ * @param {Array<{dose:number, interval:number, startTime:Date}>} regimens
+ *     Sorted by startTime, ascending.
+ * @param {Date} untilTime - upper bound for dose times (inclusive)
+ * @returns {Array<{time:Date, amount:number}>}
  */
-export function predictConcentration(kel, vd, dose, interval, startTime, measurementTime) {
-    const timeSinceStart = (measurementTime - startTime) / (1000 * 60 * 60);
-    const doseNumber = Math.floor(timeSinceStart / interval) + 1;
-    const timeAfterLastDose = timeSinceStart % interval;
-
-    let effectiveAccumulation;
-    if (doseNumber <= 5) {
-        effectiveAccumulation = (1 - Math.exp(-kel * interval * doseNumber)) /
-                               (1 - Math.exp(-kel * interval));
-    } else {
-        effectiveAccumulation = 1 / (1 - Math.exp(-kel * interval));
+export function enumerateDoses(regimens, untilTime) {
+    const doses = [];
+    const untilMs = untilTime.getTime();
+    for (let i = 0; i < regimens.length; i++) {
+        const r = regimens[i];
+        const intervalMs = r.interval * 3600000;
+        const endMs = i + 1 < regimens.length
+            ? regimens[i + 1].startTime.getTime()
+            : Infinity;
+        let t = r.startTime.getTime();
+        while (t < endMs && t <= untilMs) {
+            doses.push({ time: new Date(t), amount: r.dose });
+            t += intervalMs;
+        }
     }
+    return doses;
+}
 
-    const peak = (dose / vd) * effectiveAccumulation;
-    return peak * Math.exp(-kel * timeAfterLastDose);
+/**
+ * Predict serum concentration at measurementTime via direct superposition over
+ * every dose given on or before that time. One-compartment, instantaneous bolus,
+ * first-order elimination. Handles arbitrary regimen changes.
+ *
+ * @param {number} kel - elimination rate constant (1/h)
+ * @param {number} vd  - volume of distribution (L)
+ * @param {Array}  regimens - dosing regimens (see enumerateDoses)
+ * @param {Date}   measurementTime
+ * @returns {number} concentration in mg/L
+ */
+export function predictConcentration(kel, vd, regimens, measurementTime) {
+    const doses = enumerateDoses(regimens, measurementTime);
+    const tMs = measurementTime.getTime();
+    let conc = 0;
+    for (const d of doses) {
+        const dt = (tMs - d.time.getTime()) / 3600000;
+        if (dt < 0) continue;
+        conc += (d.amount / vd) * Math.exp(-kel * dt);
+    }
+    return conc;
 }

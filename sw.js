@@ -1,5 +1,5 @@
 // Service Worker for offline PWA support
-const CACHE_NAME = 'vanco-tdm-v4';
+const CACHE_NAME = 'vanco-tdm-v5';
 const ASSETS = [
     './',
     './index.html',

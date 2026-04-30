@@ -4,15 +4,16 @@ import { predictConcentration } from './pk-calculations.js';
 
 /**
  * Multi-point Bayesian fitting using weighted least squares with Nelder-Mead optimization.
- * Fits both Kel and Vd from multiple concentration measurements.
+ * Fits both Kel and Vd from multiple concentration measurements across one or more
+ * dosing regimens.
  *
- * @param {Object} patientData - { dose, interval, startTime }
+ * @param {Object} patientData - { regimens: Array<{dose, interval, startTime}> }
  * @param {Array} measurements - Array of { time: Date, concentration: number }
  * @param {Object} populationPK - { kel, vd }
  * @returns {Object} Individualized PK parameters and fit quality metrics
  */
 export function multiPointBayesianFit(patientData, measurements, populationPK) {
-    const { dose, interval, startTime } = patientData;
+    const { regimens } = patientData;
     const { kel: kelPop, vd: vdPop } = populationPK;
 
     if (measurements.length === 1) {
@@ -20,7 +21,7 @@ export function multiPointBayesianFit(patientData, measurements, populationPK) {
     }
 
     function predict(kel, vd, measurementTime) {
-        return predictConcentration(kel, vd, dose, interval, startTime, measurementTime);
+        return predictConcentration(kel, vd, regimens, measurementTime);
     }
 
     function objectiveFunction(params) {
@@ -70,24 +71,15 @@ export function multiPointBayesianFit(patientData, measurements, populationPK) {
 }
 
 /**
- * Single-point Bayesian adjustment (Vd-only)
+ * Single-point Bayesian adjustment (Vd-only).
+ * Predicts concentration with population PK across the full regimen sequence,
+ * then scales Vd by the predicted/observed ratio.
  */
 export function singlePointBayesianFit(patientData, measurement, populationPK) {
-    const { dose, interval, startTime } = patientData;
+    const { regimens } = patientData;
     const { kel: kelPop, vd: vdPop } = populationPK;
 
-    const timeSinceStart = (measurement.time - startTime) / (1000 * 60 * 60);
-    const doseNumber = Math.floor(timeSinceStart / interval) + 1;
-    const timeAfterLastDose = timeSinceStart % interval;
-
-    let cPredicted;
-    if (doseNumber === 1) {
-        cPredicted = (dose / vdPop) * Math.exp(-kelPop * timeAfterLastDose);
-    } else {
-        const peakSS = (dose / vdPop) * (1 / (1 - Math.exp(-kelPop * interval)));
-        cPredicted = peakSS * Math.exp(-kelPop * timeAfterLastDose);
-    }
-
+    const cPredicted = predictConcentration(kelPop, vdPop, regimens, measurement.time);
     const vdIndividual = vdPop * (cPredicted / measurement.concentration);
 
     return {

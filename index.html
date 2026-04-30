@@ -135,21 +135,16 @@
                         </div>
                     </div>
 
-                    <!-- Dosing Regimen -->
-                    <div class="form-group-title" data-i18n="dosingRegimen">Current Dosing Regimen</div>
-                    <div class="grid-2">
-                        <div class="input-group">
-                            <label for="dose" data-i18n="dose">Dose (mg)</label>
-                            <input type="number" id="dose" required step="250" data-placeholder="dosePlaceholder">
+                    <!-- Dosing Regimens (one or more) -->
+                    <div class="form-group-title" data-i18n="dosingRegimen">Dosing Regimen</div>
+                    <div class="dosing-section">
+                        <div id="regimensContainer">
+                            <!-- Dynamic regimen entries are inserted here by JavaScript -->
                         </div>
-                        <div class="input-group">
-                            <label for="interval" data-i18n="interval">Interval (hours)</label>
-                            <input type="number" id="interval" required step="6" data-placeholder="intervalPlaceholder">
-                        </div>
-                        <div class="input-group full-width">
-                            <label for="startTime" data-i18n="startTime">First Dose Time</label>
-                            <input type="datetime-local" id="startTime" required>
-                        </div>
+                        <button type="button" id="addRegimenBtn" class="btn-secondary" data-i18n="addRegimen">
+                            + Add Regimen
+                        </button>
+                        <small class="hint regimen-hint" data-i18n="regimenHint">Add a new regimen if dose or interval changed mid-treatment.</small>
                     </div>
 
                     <!-- Monitoring -->

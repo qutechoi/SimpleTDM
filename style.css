@@ -474,7 +474,8 @@ input:-webkit-autofill:active {
     margin-top: 0.5rem;
 }
 
-.measurement-entry {
+.measurement-entry,
+.regimen-entry {
     background: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -484,12 +485,14 @@ input:-webkit-autofill:active {
     transition: all 0.3s ease;
 }
 
-.measurement-entry.highlight {
+.measurement-entry.highlight,
+.regimen-entry.highlight {
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
 }
 
-.measurement-header {
+.measurement-header,
+.regimen-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -498,7 +501,8 @@ input:-webkit-autofill:active {
     border-bottom: 1px solid var(--border-color);
 }
 
-.measurement-label {
+.measurement-label,
+.regimen-label {
     font-weight: 600;
     font-size: 0.875rem;
     color: var(--primary-color);
@@ -540,7 +544,8 @@ input:-webkit-autofill:active {
     color: white;
 }
 
-.measurement-hint {
+.measurement-hint,
+.regimen-hint {
     display: block;
     margin-top: 0.75rem;
     color: var(--text-secondary);
@@ -786,7 +791,8 @@ input:-webkit-autofill:active {
     background: rgba(14, 165, 233, 0.1);
 }
 
-[data-theme="dark"] .measurement-entry.highlight {
+[data-theme="dark"] .measurement-entry.highlight,
+[data-theme="dark"] .regimen-entry.highlight {
     box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 

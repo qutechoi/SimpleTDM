@@ -35,6 +35,7 @@ const vdTrue = 49.0;
 const dose = 1000;
 const interval = 12;
 const startTime = new Date('2024-01-01T08:00');
+const regimens = [{ dose, interval, startTime }];
 
 // Population priors (slightly off from true values)
 const populationPK = { kel: 0.070, vd: 52.0 };
@@ -42,7 +43,7 @@ const populationPK = { kel: 0.070, vd: 52.0 };
 // Generate "measured" concentrations at known times using true parameters
 function generateMeasurement(hoursAfterStart) {
     const time = new Date(startTime.getTime() + hoursAfterStart * 3600000);
-    const conc = predictConcentration(kelTrue, vdTrue, dose, interval, startTime, time);
+    const conc = predictConcentration(kelTrue, vdTrue, regimens, time);
     return { time, concentration: conc };
 }
 
@@ -53,7 +54,7 @@ console.log('\n=== Single-Point Bayesian Fit ===');
 
 const singleMeasurement = generateMeasurement(10); // 10h after first dose (trough-ish)
 const singleResult = singlePointBayesianFit(
-    { dose, interval, startTime },
+    { regimens },
     singleMeasurement,
     populationPK
 );
@@ -74,7 +75,7 @@ const measurements2 = [
 ];
 
 const result2 = multiPointBayesianFit(
-    { dose, interval, startTime },
+    { regimens },
     measurements2,
     populationPK
 );
@@ -96,7 +97,7 @@ const measurements3 = [
 ];
 
 const result3 = multiPointBayesianFit(
-    { dose, interval, startTime },
+    { regimens },
     measurements3,
     populationPK
 );
@@ -118,7 +119,7 @@ const measurementsAccum = [
 ];
 
 const resultAccum = multiPointBayesianFit(
-    { dose, interval, startTime },
+    { regimens },
     measurementsAccum,
     populationPK
 );
@@ -150,7 +151,7 @@ console.log('\n=== Edge Cases ===');
 // Very high concentration measurement (should pull Vd down)
 const highConcMeasurement = { time: new Date(startTime.getTime() + 6 * 3600000), concentration: 40 };
 const resultHigh = singlePointBayesianFit(
-    { dose, interval, startTime },
+    { regimens },
     highConcMeasurement,
     populationPK
 );
@@ -159,7 +160,7 @@ assertTrue(resultHigh.vd < populationPK.vd, 'High concentration pulls Vd down');
 // Very low concentration measurement (should push Vd up)
 const lowConcMeasurement = { time: new Date(startTime.getTime() + 6 * 3600000), concentration: 5 };
 const resultLow = singlePointBayesianFit(
-    { dose, interval, startTime },
+    { regimens },
     lowConcMeasurement,
     populationPK
 );
@@ -179,6 +180,42 @@ assertTrue(
     Math.abs(result3.halfLife - 0.693 / result3.kel) < 0.01,
     'T½ = 0.693 / Kel'
 );
+
+// =====================================================
+// Test Suite: Multi-Regimen Bayesian Fit
+// =====================================================
+console.log('\n=== Multi-Regimen Bayesian Fit ===');
+
+// Patient on 1000mg q12h × 24h, then escalated to 1500mg q12h.
+// Synthesize "true" measurements with the multi-regimen predictor, then verify
+// the fitter recovers Kel/Vd close to truth.
+const multiRegimens = [
+    { dose: 1000, interval: 12, startTime },
+    { dose: 1500, interval: 12, startTime: new Date(startTime.getTime() + 24 * 3600000) }
+];
+
+function generateMultiMeasurement(hoursAfterStart) {
+    const time = new Date(startTime.getTime() + hoursAfterStart * 3600000);
+    const conc = predictConcentration(kelTrue, vdTrue, multiRegimens, time);
+    return { time, concentration: conc };
+}
+
+const multiMeasurements = [
+    generateMultiMeasurement(11),  // trough of regimen 1 (after 1000@0)
+    generateMultiMeasurement(23),  // trough at end of regimen 1
+    generateMultiMeasurement(35)   // trough of first 1500mg dose
+];
+
+const multiResult = multiPointBayesianFit(
+    { regimens: multiRegimens },
+    multiMeasurements,
+    populationPK
+);
+
+assertRange(multiResult.kel, 0.05, 0.08, 'Multi-regimen Kel near true value');
+assertRange(multiResult.vd, 40, 58, 'Multi-regimen Vd near true value');
+assertRange(multiResult.fitQuality.rSquared, 0.8, 1.0, 'Multi-regimen R² > 0.8');
+assertRange(multiResult.fitQuality.rmse, 0, 3, 'Multi-regimen RMSE < 3 mg/L');
 
 // =====================================================
 // Summary

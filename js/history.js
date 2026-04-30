@@ -48,7 +48,7 @@ const CSV_LOCALES = {
         headers: [
             'Timestamp', 'AgeYears', 'AgeMonths', 'Sex', 'Pediatric',
             'Height_cm', 'Weight_kg', 'SCr_mg_dL',
-            'Dose_mg', 'Interval_h', 'FirstDoseTime', 'MeasurementCount',
+            'CurrentDose_mg', 'CurrentInterval_h', 'FirstDoseTime', 'RegimenCount', 'Regimens', 'MeasurementCount',
             'AUC24', 'Trough_mg_L', 'Peak_mg_L', 'Clearance_L_h',
             'HalfLife_h', 'Kel_per_h', 'Vd_L', 'CrCl_mL_min',
             'R_squared', 'RMSE', 'Effectiveness', 'Toxicity'
@@ -62,7 +62,7 @@ const CSV_LOCALES = {
         headers: [
             '일시', '나이(세)', '나이(개월)', '성별', '환자구분',
             '키(cm)', '체중(kg)', '혈청크레아티닌(mg/dL)',
-            '용량(mg)', '투약간격(h)', '첫투약시간', '측정횟수',
+            '현재용량(mg)', '현재간격(h)', '첫투약시간', '요법수', '요법내역', '측정횟수',
             'AUC24', 'Trough(mg/L)', 'Peak(mg/L)', '청소율(L/h)',
             '반감기(h)', 'Kel(1/h)', 'Vd(L)', 'CrCl(mL/min)',
             'R제곱', 'RMSE', '효과예측', '독성평가'
@@ -96,9 +96,15 @@ function num(v, digits) {
 
 function recordToRow(r, locale) {
     const p = r.patient || {};
-    const d = r.dosing || {};
     const res = r.results || {};
     const fq = res.fitQuality || {};
+    // Backward compat: legacy records used `r.dosing` (single regimen)
+    const regimens = r.regimens || (r.dosing ? [r.dosing] : []);
+    const first = regimens[0] || {};
+    const last = regimens[regimens.length - 1] || {};
+    const regimensSummary = regimens
+        .map(g => `${g.dose}mg q${g.interval}h @${g.startTime}`)
+        .join(' | ');
     const effKey = assessEffectiveness(res.auc24);
     const toxKey = assessToxicity(res.auc24, res.trough);
     return [
@@ -107,7 +113,7 @@ function recordToRow(r, locale) {
         locale.sex[p.sex] ?? p.sex ?? '',
         locale.pediatric[p.pediatric ? 'true' : 'false'],
         p.height, p.weight, p.scr,
-        d.dose, d.interval, d.startTime, (r.measurements || []).length,
+        last.dose, last.interval, first.startTime, regimens.length, regimensSummary, (r.measurements || []).length,
         num(res.auc24, 1), num(res.trough, 1), num(res.peakSS, 1), num(res.cl, 2),
         num(res.halfLife, 2), num(res.kel, 5), num(res.vd, 2), num(res.crcl, 1),
         fq.rSquared != null ? fq.rSquared.toFixed(3) : '',

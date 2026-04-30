@@ -4,7 +4,7 @@ import { getLang, setLang, t as getT, applyLanguage } from './i18n.js';
 import { calculatePopulationPK, calculatePeakSS, calculateTroughSS, calculateAUC24 } from './pk-calculations.js';
 import { multiPointBayesianFit } from './bayesian-fitting.js';
 import { updateChartExtended, updateChartTheme, updateChartLanguage } from './chart.js';
-import { validateAllInputs, setupRealtimeValidation } from './validation.js';
+import { validateAllInputs, validateRegimens, setupRealtimeValidation, validateField } from './validation.js';
 import { appendHistory, getHistory, filterByDateRange, deleteHistory, clearHistory, exportToCsv } from './history.js';
 
 let currentTheme = localStorage.getItem('theme') || 'light';
@@ -45,10 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sex: document.getElementById('sex'),
         height: document.getElementById('height'),
         weight: document.getElementById('weight'),
-        scr: document.getElementById('scr'),
-        dose: document.getElementById('dose'),
-        interval: document.getElementById('interval'),
-        startTime: document.getElementById('startTime')
+        scr: document.getElementById('scr')
     };
     const pediatricHint = document.getElementById('pediatricHint');
 
@@ -95,6 +92,118 @@ document.addEventListener('DOMContentLoaded', () => {
             moonIcon.style.display = 'none';
             if (themeToggleText) themeToggleText.textContent = t.themeToggle;
         }
+    }
+
+    // ==========================================
+    // Regimen Management
+    // ==========================================
+    function createRegimenEntry(index) {
+        const t = getT();
+        const entry = document.createElement('div');
+        entry.className = 'regimen-entry';
+        entry.dataset.index = index;
+
+        const startLabel = index === 0 ? t.startTime : t.regimenChangeTime;
+
+        entry.innerHTML = `
+            <div class="regimen-header">
+                <span class="regimen-label">${t.regimenLabel} #${index + 1}</span>
+                ${index > 0 ? `<button type="button" class="btn-remove">${t.remove}</button>` : ''}
+            </div>
+            <div class="grid-2">
+                <div class="input-group">
+                    <label>${t.dose}</label>
+                    <input type="number" class="regimen-dose" required step="250" placeholder="${t.dosePlaceholder}">
+                </div>
+                <div class="input-group">
+                    <label>${t.interval}</label>
+                    <input type="number" class="regimen-interval" required step="6" placeholder="${t.intervalPlaceholder}">
+                </div>
+                <div class="input-group full-width">
+                    <label>${startLabel}</label>
+                    <input type="datetime-local" class="regimen-start" required>
+                </div>
+            </div>
+        `;
+
+        const removeBtn = entry.querySelector('.btn-remove');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => removeRegimen(index));
+        }
+
+        // Real-time validation on dose/interval (start time validated at calculate-time
+        // because order depends on sibling regimens)
+        entry.querySelector('.regimen-dose').addEventListener('blur', (e) =>
+            validateField(e.target, 'dose'));
+        entry.querySelector('.regimen-interval').addEventListener('blur', (e) =>
+            validateField(e.target, 'interval'));
+
+        return entry;
+    }
+
+    function addRegimen() {
+        const container = document.getElementById('regimensContainer');
+        const index = container.children.length;
+        const entry = createRegimenEntry(index);
+        container.appendChild(entry);
+        entry.classList.add('highlight');
+        setTimeout(() => entry.classList.remove('highlight'), 1000);
+    }
+
+    function removeRegimen(index) {
+        const container = document.getElementById('regimensContainer');
+        const entries = container.querySelectorAll('.regimen-entry');
+        if (entries.length > 1) {
+            entries[index].remove();
+            reindexRegimens();
+        }
+    }
+
+    function reindexRegimens() {
+        const t = getT();
+        const container = document.getElementById('regimensContainer');
+        const entries = container.querySelectorAll('.regimen-entry');
+
+        entries.forEach((entry, i) => {
+            entry.dataset.index = i;
+            entry.querySelector('.regimen-label').textContent = `${t.regimenLabel} #${i + 1}`;
+
+            // Update start time label (first vs subsequent)
+            const startLabel = entry.querySelector('.regimen-start')
+                .closest('.input-group').querySelector('label');
+            startLabel.textContent = i === 0 ? t.startTime : t.regimenChangeTime;
+
+            let removeBtn = entry.querySelector('.btn-remove');
+            if (i === 0 && removeBtn) {
+                removeBtn.remove();
+            } else if (i > 0 && !removeBtn) {
+                const header = entry.querySelector('.regimen-header');
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn-remove';
+                btn.textContent = t.remove;
+                btn.addEventListener('click', () => removeRegimen(i));
+                header.appendChild(btn);
+            }
+        });
+    }
+
+    function collectRegimens() {
+        const entries = document.querySelectorAll('#regimensContainer .regimen-entry');
+        const regimens = [];
+        entries.forEach(entry => {
+            const dose = parseFloat(entry.querySelector('.regimen-dose').value);
+            const interval = parseFloat(entry.querySelector('.regimen-interval').value);
+            const startStr = entry.querySelector('.regimen-start').value;
+            if (dose && interval && startStr) {
+                regimens.push({
+                    dose,
+                    interval,
+                    startTime: new Date(startStr)
+                });
+            }
+        });
+        return regimens.sort((a, b) => a.startTime - b.startTime);
     }
 
     // ==========================================
@@ -201,23 +310,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ageYears = parseInt(inputs.ageYears.value) || 0;
         const ageMonths = parseInt(inputs.ageMonths.value) || 0;
-        const age = ageYears + ageMonths / 12; // fractional age in years
+        const age = ageYears + ageMonths / 12;
         const sex = inputs.sex.value;
         const height = parseFloat(inputs.height.value);
         const weight = parseFloat(inputs.weight.value);
         const scr = parseFloat(inputs.scr.value);
-        const dose = parseFloat(inputs.dose.value);
-        const interval = parseFloat(inputs.interval.value);
-        const startTime = new Date(inputs.startTime.value);
 
-        if (inputs.ageYears.value === '' || !height || !weight || !scr || !dose || !interval || !inputs.startTime.value) {
+        if (inputs.ageYears.value === '' || !height || !weight || !scr) {
             alert(t.fillAllFields);
             return;
         }
 
-        const { valid, warnings } = validateAllInputs(inputs);
-        if (!valid) return;
+        // Validate patient demographics first (no regimens passed yet for warnings)
+        const { valid: demoValid } = validateAllInputs(inputs, null);
+        if (!demoValid) return;
 
+        // Per-regimen validation (dose/interval ranges + chronological order)
+        if (!validateRegimens()) return;
+
+        const regimens = collectRegimens();
+        if (regimens.length === 0) {
+            alert(t.noRegimens);
+            return;
+        }
+        const firstRegimen = regimens[0];
+        const lastRegimen = regimens[regimens.length - 1];
+
+        // Clinical warnings (now with regimens, e.g. unusual mg/kg dose)
+        const { warnings } = validateAllInputs(inputs, regimens);
         if (warnings.length > 0) {
             const proceed = confirm(warnings.join('\n') + '\n\n' +
                 (lang === 'en' ? 'Do you want to proceed?' : '계속 진행하시겠습니까?'));
@@ -231,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         for (const m of measurements) {
-            if (m.time < startTime) {
+            if (m.time < firstRegimen.startTime) {
                 alert(lang === 'en'
                     ? 'All sample times must be after the first dose time!'
                     : '모든 채혈 시간은 첫 투약 시간 이후여야 합니다!');
@@ -239,21 +359,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Population PK
+        // Population PK (patient-level, regimen-independent)
         const popPK = calculatePopulationPK(age, sex, height, weight, scr);
-        const patientData = { dose, interval, startTime };
         const populationPK = { kel: popPK.kel, vd: popPK.vd };
 
-        // Bayesian fitting
-        individualizedPK = multiPointBayesianFit(patientData, measurements, populationPK);
+        // Bayesian fitting using the full regimen sequence
+        individualizedPK = multiPointBayesianFit({ regimens }, measurements, populationPK);
         const { kel, vd, cl, halfLife, fitQuality } = individualizedPK;
 
-        // Steady-state predictions
-        const peakSS = calculatePeakSS(dose, vd, kel, interval);
-        const troughSS = calculateTroughSS(peakSS, kel, interval);
-        const auc24 = calculateAUC24(dose, interval, cl);
+        // Steady-state metrics reflect the LAST regimen — what the patient is now on
+        const peakSS = calculatePeakSS(lastRegimen.dose, vd, kel, lastRegimen.interval);
+        const troughSS = calculateTroughSS(peakSS, kel, lastRegimen.interval);
+        const auc24 = calculateAUC24(lastRegimen.dose, lastRegimen.interval, cl);
 
-        // Update UI
         outputs.aucValue.textContent = auc24.toFixed(1);
         outputs.troughValue.textContent = troughSS.toFixed(1);
         outputs.clValue.textContent = cl.toFixed(2);
@@ -261,14 +379,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateStatus(auc24, troughSS);
         displayFitQuality(fitQuality);
-        updateChartExtended(peakSS, kel, vd, interval, measurements, startTime, dose, currentTheme, individualizedPK);
-        generateSpecificDoseRecommendations(individualizedPK, dose, interval);
+        updateChartExtended(peakSS, kel, vd, regimens, measurements, currentTheme, individualizedPK);
+        generateSpecificDoseRecommendations(individualizedPK, lastRegimen.dose, lastRegimen.interval);
 
         document.getElementById('resultsSection').style.display = 'block';
         document.getElementById('simulationBox').style.display = 'block';
         document.getElementById('doseRecommendationsBox').style.display = 'block';
 
-        // Results watermark
         let watermark = document.querySelector('.results-watermark');
         if (!watermark) {
             watermark = document.createElement('div');
@@ -277,16 +394,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         watermark.textContent = t.resultsWatermark;
 
-        // Save to history
         appendHistory({
             patient: {
                 ageYears, ageMonths, sex, height, weight, scr,
                 pediatric: popPK.pediatric
             },
-            dosing: {
-                dose, interval,
-                startTime: inputs.startTime.value
-            },
+            regimens: regimens.map(r => ({
+                dose: r.dose,
+                interval: r.interval,
+                startTime: r.startTime.toISOString()
+            })),
             measurements: measurements.map(m => ({
                 time: m.time.toISOString(),
                 concentration: m.concentration
@@ -519,6 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTheme();
     applyLanguage();
     langText.textContent = getLang() === 'en' ? '한국어' : 'English';
+    addRegimen();
     addMeasurement();
     setupRealtimeValidation();
 
@@ -532,10 +650,17 @@ document.addEventListener('DOMContentLoaded', () => {
             data[key] = input.value;
         }
 
-        // Save measurements
-        const entries = document.querySelectorAll('#measurementsContainer .measurement-entry');
+        data.regimens = [];
+        document.querySelectorAll('#regimensContainer .regimen-entry').forEach(entry => {
+            data.regimens.push({
+                dose: entry.querySelector('.regimen-dose').value,
+                interval: entry.querySelector('.regimen-interval').value,
+                startTime: entry.querySelector('.regimen-start').value
+            });
+        });
+
         data.measurements = [];
-        entries.forEach(entry => {
+        document.querySelectorAll('#measurementsContainer .measurement-entry').forEach(entry => {
             data.measurements.push({
                 time: entry.querySelector('.sample-time').value,
                 conc: entry.querySelector('.measured-conc').value
@@ -561,7 +686,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data[key] !== undefined) input.value = data[key];
         }
 
-        // Restore measurements
+        // Restore regimens (with backward compat for legacy single-regimen schema)
+        let regimensData = data.regimens;
+        if (!regimensData && data.dose) {
+            regimensData = [{
+                dose: data.dose,
+                interval: data.interval,
+                startTime: data.startTime
+            }];
+        }
+        if (!regimensData || regimensData.length === 0) {
+            regimensData = [{ dose: '', interval: '', startTime: '' }];
+        }
+        const regContainer = document.getElementById('regimensContainer');
+        regContainer.innerHTML = '';
+        regimensData.forEach((r, i) => {
+            const entry = createRegimenEntry(i);
+            regContainer.appendChild(entry);
+            entry.querySelector('.regimen-dose').value = r.dose || '';
+            entry.querySelector('.regimen-interval').value = r.interval || '';
+            entry.querySelector('.regimen-start').value = r.startTime || '';
+        });
+
         if (data.measurements && data.measurements.length > 0) {
             const container = document.getElementById('measurementsContainer');
             container.innerHTML = '';
@@ -585,6 +731,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const input of Object.values(inputs)) {
             input.value = '';
         }
+
+        const regContainer = document.getElementById('regimensContainer');
+        regContainer.innerHTML = '';
+        regContainer.appendChild(createRegimenEntry(0));
 
         const container = document.getElementById('measurementsContainer');
         container.innerHTML = '';
@@ -632,8 +782,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         historyTableBody.innerHTML = records.map(r => {
             const p = r.patient || {};
-            const d = r.dosing || {};
             const res = r.results || {};
+            // Backward compat: pre-multi-regimen records used `r.dosing`
+            const regimens = r.regimens || (r.dosing ? [r.dosing] : []);
+            const last = regimens[regimens.length - 1] || {};
+            const regimenLabel = regimens.length > 1
+                ? `${last.dose}mg q${last.interval}h (×${regimens.length})`
+                : `${last.dose}mg q${last.interval}h`;
             const ageLabel = p.pediatric && p.ageMonths
                 ? `${p.ageYears}y${p.ageMonths}m`
                 : `${p.ageYears}y`;
@@ -641,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tr>
                     <td>${formatTs(r.timestamp)}</td>
                     <td>${ageLabel} / ${p.sex === 'male' ? 'M' : 'F'} / ${p.weight}kg</td>
-                    <td>${d.dose}mg q${d.interval}h</td>
+                    <td>${regimenLabel}</td>
                     <td>${typeof res.auc24 === 'number' ? res.auc24.toFixed(1) : '-'}</td>
                     <td>${typeof res.trough === 'number' ? res.trough.toFixed(1) : '-'}</td>
                     <td><button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button></td>
@@ -696,6 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Event Listeners
+    document.getElementById('addRegimenBtn').addEventListener('click', addRegimen);
     document.getElementById('addMeasurementBtn').addEventListener('click', addMeasurement);
     document.getElementById('simulateBtn').addEventListener('click', simulateDose);
     calculateBtn.addEventListener('click', calculateTDM);
@@ -719,6 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme();
         langText.textContent = newLang === 'en' ? '한국어' : 'English';
         localStorage.setItem('language', newLang);
+        reindexRegimens();
         reindexMeasurements();
         updateChartLanguage();
     });

@@ -156,14 +156,47 @@ console.log('\n=== Predict Concentration ===');
 
 // First dose, 6h after: C = (1000/49)*exp(-0.065*6) = 20.41*0.677 = 13.82
 const startTime = new Date('2024-01-01T08:00');
+const regimens1 = [{ dose: 1000, interval: 12, startTime }];
 const time6h = new Date('2024-01-01T14:00');
-const conc6h = predictConcentration(0.065, 49, 1000, 12, startTime, time6h);
+const conc6h = predictConcentration(0.065, 49, regimens1, time6h);
 assertRange(conc6h, 12, 16, 'First dose 6h concentration range');
 
 // Near trough (11.5h): C = (1000/49)*exp(-0.065*11.5) = 20.41*0.474 = 9.67
 const time11h5 = new Date('2024-01-01T19:30');
-const conc11h5 = predictConcentration(0.065, 49, 1000, 12, startTime, time11h5);
+const conc11h5 = predictConcentration(0.065, 49, regimens1, time11h5);
 assertRange(conc11h5, 8, 12, 'First dose near-trough (11.5h) concentration range');
+
+// =====================================================
+// Test Suite: Multi-Regimen Prediction
+// =====================================================
+console.log('\n=== Multi-Regimen Prediction ===');
+
+// Scenario: 1000mg q12h × 24h, then escalate to 1500mg q12h
+// Regimen 1 doses occur at t=0 and t=12 (regimen 2 starts at t=24, so q12h
+// boundary at t=24 is the new regimen, not regimen 1).
+const startTimeA = new Date('2024-01-01T08:00');
+const startTimeB = new Date('2024-01-02T08:00'); // +24h
+const multiRegimens = [
+    { dose: 1000, interval: 12, startTime: startTimeA },
+    { dose: 1500, interval: 12, startTime: startTimeB }
+];
+
+// At t=18h, only regimen 1's two doses have been given:
+//   C = (1000/49) * [exp(-0.065*18) + exp(-0.065*6)] ≈ 20.15
+const t18h = new Date(startTimeA.getTime() + 18 * 3600000);
+const conc18h = predictConcentration(0.065, 49, multiRegimens, t18h);
+assertRange(conc18h, 18, 22, 'Multi-regimen: t=18h still under regimen 1');
+
+// At t=30h, three doses contribute (1000@0, 1000@12, 1500@24):
+//   C = (1/49) * [1000·exp(-1.95) + 1000·exp(-1.17) + 1500·exp(-0.39)] ≈ 29.9
+const t30h = new Date(startTimeA.getTime() + 30 * 3600000);
+const conc30h = predictConcentration(0.065, 49, multiRegimens, t30h);
+assertRange(conc30h, 27, 33, 'Multi-regimen: t=30h reflects new 1500mg dose');
+
+// At exactly t=24h the new 1500mg dose lands instantaneously and is included:
+//   C = (1500/49) + (1000/49)*[exp(-0.065*24) + exp(-0.065*12)] ≈ 44.3
+const conc24h = predictConcentration(0.065, 49, multiRegimens, startTimeB);
+assertRange(conc24h, 42, 46, 'Multi-regimen: switch boundary includes new dose');
 
 // =====================================================
 // Test Suite: Clinical Scenarios

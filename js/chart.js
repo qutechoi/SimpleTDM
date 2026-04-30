@@ -1,45 +1,59 @@
 // chart.js - Chart Rendering Module
 
 import { getLang, t as getT } from './i18n.js';
+import { enumerateDoses } from './pk-calculations.js';
 
 let pkChart = null;
 
 export function getChart() { return pkChart; }
 
 /**
- * Updates the concentration-time chart with multiple dosing intervals
+ * Renders the concentration-time chart for an arbitrary sequence of dosing
+ * regimens via direct superposition of all individual dose contributions.
+ *
+ * @param {number} peakSS - asymptotic SS peak for the LAST regimen (used for label only)
+ * @param {number} kel    - individualized elimination rate (1/h)
+ * @param {number} vd     - individualized volume of distribution (L)
+ * @param {Array}  regimens - sorted regimens, each {dose, interval, startTime: Date}
+ * @param {Array}  measurements - {time: Date, concentration: number}
+ * @param {string} currentTheme
+ * @param {Object} individualizedPK - includes fitQuality.predictions for overlay
  */
-export function updateChartExtended(peakSS, kel, vd, interval, measurements, startTime, dose, currentTheme, individualizedPK) {
+export function updateChartExtended(peakSS, kel, vd, regimens, measurements, currentTheme, individualizedPK) {
     const t = getT();
     const ctx = document.getElementById('pkChart');
 
+    const firstStart = regimens[0].startTime;
+    const lastRegimen = regimens[regimens.length - 1];
     const lastMeasurementTime = measurements[measurements.length - 1].time;
-    const timeSinceStart = (lastMeasurementTime - startTime) / (1000 * 60 * 60);
-    const numIntervalsToShow = Math.max(3, Math.ceil(timeSinceStart / interval) + 1);
-    const totalDuration = numIntervalsToShow * interval;
+    const hoursToLastMeasurement = (lastMeasurementTime - firstStart) / (1000 * 60 * 60);
+
+    // Round chart end up to a clean multiple of the last regimen's interval, plus
+    // ~2 intervals of forward extrapolation so the user can see where SS settles.
+    const numIntervalsAhead = 2;
+    const totalDuration = Math.max(
+        3 * lastRegimen.interval,
+        Math.ceil(hoursToLastMeasurement / lastRegimen.interval + numIntervalsAhead) * lastRegimen.interval
+    );
+
+    const chartEndTime = new Date(firstStart.getTime() + totalDuration * 3600000);
+    const allDoses = enumerateDoses(regimens, chartEndTime);
 
     const timePoints = [];
     const concentrations = [];
-    const steps = totalDuration * 4;
+    const steps = Math.round(totalDuration * 4);
 
     for (let i = 0; i <= steps; i++) {
-        const time = (totalDuration * i) / steps;
-        timePoints.push(time.toFixed(1));
-
-        const currentInterval = Math.floor(time / interval);
-        const timeAfterDose = time % interval;
-        const doseNumber = currentInterval + 1;
-
-        let effectiveAccumulation;
-        if (doseNumber <= 5) {
-            effectiveAccumulation = (1 - Math.exp(-kel * interval * doseNumber)) /
-                                   (1 - Math.exp(-kel * interval));
-        } else {
-            effectiveAccumulation = 1 / (1 - Math.exp(-kel * interval));
+        const tHours = (totalDuration * i) / steps;
+        timePoints.push(tHours.toFixed(1));
+        const tMs = firstStart.getTime() + tHours * 3600000;
+        let conc = 0;
+        for (const d of allDoses) {
+            const dt = (tMs - d.time.getTime()) / 3600000;
+            if (dt < 0) break;
+            conc += (d.amount / vd) * Math.exp(-kel * dt);
         }
-
-        const peak = (dose / vd) * effectiveAccumulation;
-        concentrations.push(peak * Math.exp(-kel * timeAfterDose));
+        concentrations.push(conc);
     }
 
     if (pkChart) pkChart.destroy();
@@ -47,7 +61,7 @@ export function updateChartExtended(peakSS, kel, vd, interval, measurements, sta
     const isDark = currentTheme === 'dark';
     const textColor = isDark ? '#f1f5f9' : '#0f172a';
     const gridColor = isDark ? '#334155' : '#e2e8f0';
-    const troughSS = peakSS * Math.exp(-kel * interval);
+    const troughSS = peakSS * Math.exp(-kel * lastRegimen.interval);
     const lang = getLang();
 
     const datasets = [{
@@ -86,7 +100,7 @@ export function updateChartExtended(peakSS, kel, vd, interval, measurements, sta
     // Measured points
     const measuredData = timePoints.map(() => null);
     measurements.forEach(m => {
-        const measurementTime = (m.time - startTime) / (1000 * 60 * 60);
+        const measurementTime = (m.time - firstStart) / (1000 * 60 * 60);
         let closestIdx = 0, closestDist = Infinity;
         timePoints.forEach((tp, idx) => {
             const dist = Math.abs(parseFloat(tp) - measurementTime);
@@ -106,11 +120,35 @@ export function updateChartExtended(peakSS, kel, vd, interval, measurements, sta
         borderWidth: 2
     });
 
+    // Regimen change markers — diamond points placed on the curve at each change time
+    if (regimens.length > 1) {
+        const changeData = timePoints.map(() => null);
+        for (let i = 1; i < regimens.length; i++) {
+            const changeHours = (regimens[i].startTime - firstStart) / (1000 * 60 * 60);
+            let closestIdx = 0, closestDist = Infinity;
+            timePoints.forEach((tp, idx) => {
+                const dist = Math.abs(parseFloat(tp) - changeHours);
+                if (dist < closestDist) { closestDist = dist; closestIdx = idx; }
+            });
+            if (closestDist < 0.5) changeData[closestIdx] = concentrations[closestIdx];
+        }
+        datasets.push({
+            label: lang === 'en' ? 'Regimen change' : '요법 변경',
+            data: changeData,
+            borderColor: '#a855f7',
+            backgroundColor: '#a855f7',
+            pointRadius: 8,
+            pointStyle: 'rectRot',
+            showLine: false,
+            borderWidth: 2
+        });
+    }
+
     // Predicted points (multi-point)
     if (individualizedPK && individualizedPK.fitQuality.predictions && measurements.length > 1) {
         const predictedData = timePoints.map(() => null);
         measurements.forEach((m, idx) => {
-            const measurementTime = (m.time - startTime) / (1000 * 60 * 60);
+            const measurementTime = (m.time - firstStart) / (1000 * 60 * 60);
             let closestIdx = 0, closestDist = Infinity;
             timePoints.forEach((tp, i) => {
                 const dist = Math.abs(parseFloat(tp) - measurementTime);
@@ -155,8 +193,18 @@ export function updateChartExtended(peakSS, kel, vd, interval, measurements, sta
                     callbacks: {
                         title: (items) => {
                             const time = parseFloat(items[0].label);
-                            const doseNum = Math.floor(time / interval) + 1;
-                            const timeAfterDose = (time % interval).toFixed(1);
+                            const tMs = firstStart.getTime() + time * 3600000;
+                            // Find the most recent dose at or before this time across all regimens
+                            let lastDoseIdx = -1;
+                            for (let i = 0; i < allDoses.length; i++) {
+                                if (allDoses[i].time.getTime() <= tMs) lastDoseIdx = i;
+                                else break;
+                            }
+                            if (lastDoseIdx < 0) {
+                                return `${lang === 'en' ? 'Time' : '시간'}: ${time}h`;
+                            }
+                            const doseNum = lastDoseIdx + 1;
+                            const timeAfterDose = ((tMs - allDoses[lastDoseIdx].time.getTime()) / 3600000).toFixed(1);
                             return `${lang === 'en' ? 'Time' : '시간'}: ${time}h (${lang === 'en' ? 'Dose' : '투약'} #${doseNum}, +${timeAfterDose}h)`;
                         },
                         label: (context) => {
