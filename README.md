@@ -19,7 +19,8 @@
 
 ### 약동학 계산
 - **성인**: Cockcroft-Gault 공식으로 크레아티닌 청소율 계산, Matzke 방정식으로 제거 속도 상수 추정
-- **소아 (18세 미만)**: Schwartz 공식으로 소아 크레아티닌 청소율 계산 (연령별 k값 자동 적용)
+- **소아 (1개월 ~ 18세 미만)**: Schwartz 공식으로 소아 크레아티닌 청소율 계산 (연령별 k값 자동 적용)
+- **신생아 (1개월 미만)**: Frymoyer 2014 모집단 PK 모델 사용 (재태연령·출생후일수 기반)
 - 이상 체중(IBW) · 조정 체중(AdjBW) 자동 계산
 - AUC24, Trough, 반감기, 청소율 결과 제공
 
@@ -59,7 +60,7 @@
 | 분포 용적 | `Vd = 0.7 L/kg` |
 | AUC24 | `AUC24 = 일일 총 투여량 / (Kel × Vd)` |
 
-### 소아 PK (18세 미만)
+### 소아 PK (1개월 ~ 18세 미만)
 
 Schwartz 공식으로 CrCl 계산: `CrCl = k × 키(cm) / SCr`
 
@@ -69,6 +70,24 @@ Schwartz 공식으로 CrCl 계산: `CrCl = k × 키(cm) / SCr`
 | 1 ~ 12세 | 0.55 |
 | 13 ~ 17세 남자 청소년 | 0.70 |
 | 13 ~ 17세 여자 청소년 | 0.55 |
+
+### 신생아 PK (1개월 미만)
+
+나이를 `0세 0개월`로 입력하면 신생아 모드가 자동 활성화되고, 재태연령(GA, 주)·출생후일수(PNA, 일) 입력란이 표시됩니다.
+
+| 항목 | 공식 |
+|------|------|
+| Postmenstrual Age | `PMA = GA + PNA / 7` (주) |
+| 청소율 | Frymoyer 2014: `CL = 0.345 × (체중/2.9)^0.75 × (PMA/40.5)^1.5 × (0.34/SCr)^0.267` (L/h) |
+| 분포 용적 | `Vd = 0.572 L/kg` |
+| 경험적 초기 용량 | NeoFax-style PMA × PNA 표 (실시간 권장) |
+
+**용량 옵션 격자**는 신생아 모드에서 mg/kg 기반(10·15·20 mg/kg × q6/q8/q12/q24)으로 자동 전환됩니다.
+
+**임상 경고** (계산 시 자동 표시):
+- PNA ≤ 7일: 혈청 크레아티닌이 모체 SCr 영향을 받아 청소율 해석에 주의 필요
+- GA < 29주: Frymoyer는 late preterm/term 데이터로 개발되어 외삽 시 불확실성 증가
+- 용량 > 20 mg/kg: 신생아 일반 범위 초과
 
 ### 목표 범위
 
@@ -84,6 +103,7 @@ Schwartz 공식으로 CrCl 계산: `CrCl = k × 키(cm) / SCr`
 1. **환자 정보 입력**
    나이(세/개월), 성별, 키, 체중, 혈청 크레아티닌 입력
    → 18세 미만이면 소아 모드 자동 전환
+   → `0세 0개월` 입력 시 신생아 모드 자동 전환 (GA·PNA 입력란 노출, 키는 선택 사항)
 
 2. **투약 요법 입력**
    용량(mg), 투약 간격(시간), 첫 투약 시간 입력
@@ -138,14 +158,14 @@ SimpleTDM/
 ├── vite.config.js          # Vite 빌드 설정
 ├── js/
 │   ├── app.js              # 앱 진입점 및 UI 로직
-│   ├── pk-calculations.js  # 약동학 계산 함수 (성인 + 소아, 다중 요법 중첩)
+│   ├── pk-calculations.js  # 약동학 계산 함수 (성인 + 소아 + 신생아, 다중 요법 중첩)
 │   ├── bayesian-fitting.js # 베이지안 파라미터 피팅
 │   ├── chart.js            # 농도-시간 곡선 차트
 │   ├── history.js          # 계산 히스토리 저장 및 CSV 내보내기
 │   ├── validation.js       # 입력값 유효성 검사
 │   └── i18n.js             # 한국어/영어 번역
 ├── tests/
-│   ├── pk-calculations.test.js   # PK 계산 단위 테스트 (51개)
+│   ├── pk-calculations.test.js   # PK 계산 단위 테스트 (80개)
 │   └── bayesian-fitting.test.js  # 베이지안 피팅 단위 테스트 (24개)
 └── .github/workflows/
     └── deploy.yml          # GitHub Actions 자동 배포
@@ -170,6 +190,8 @@ SimpleTDM/
 3. Cockcroft DW, Gault MH. Prediction of creatinine clearance from serum creatinine. *Nephron.* 1976;16(1):31-41.
 4. Schwartz GJ, et al. New equations to estimate GFR in children with CKD. *J Am Soc Nephrol.* 2009;20(3):629-637.
 5. Devine BJ. Gentamicin therapy. *Drug Intell Clin Pharm.* 1974;8:650-655.
+6. Frymoyer A, Hersh AL, Coralic Z, Benitz WE, Roberts JK. Prediction of vancomycin pharmacokinetics in preterm and term neonates: a Bayesian approach. *Pediatr Infect Dis J.* 2014;33(11):1141-1147.
+7. Bradley JS, Nelson JD, et al. *Nelson's Pediatric Antimicrobial Therapy.* 28th ed. American Academy of Pediatrics; 2022. (NeoFax-style PMA × PNA empirical dosing)
 
 ---
 
