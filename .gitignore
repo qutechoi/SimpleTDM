@@ -20,3 +20,7 @@ node_modules/
 
 # Build output
 dist/
+
+# Project documents (not tracked)
+사용설명서.pdf
+실험계획서.pdf
