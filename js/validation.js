@@ -5,12 +5,26 @@ import { translations, getLang } from './i18n.js';
 export const validationRules = {
     ageYears:  { min: 0,   max: 120, key: 'valAgeRange' },
     ageMonths: { min: 0,   max: 11,  key: 'valAgeMonthsRange' },
+    gaWeeks:   { min: 22,  max: 44,  key: 'valGaRange' },
+    pnaDays:   { min: 0,   max: 28,  key: 'valPnaRange' },
     height:    { min: 20,  max: 250, key: 'valHeightRange' },
-    weight:    { min: 0.5, max: 300, key: 'valWeightRange' },
+    weight:    { min: 0.3, max: 300, key: 'valWeightRange' },
     scr:       { min: 0.1, max: 15,  key: 'valScrRange' },
     dose:      { min: 1,   max: 5000, key: 'valDoseRange' },
     interval:  { min: 4,   max: 72,  key: 'valIntervalRange' }
 };
+
+/**
+ * Detect neonatal mode from form inputs: age 0y 0m AND both GA/PNA provided.
+ */
+export function isNeonatalInput(inputs) {
+    const years = parseInt((inputs.ageYears || {}).value);
+    const months = parseInt((inputs.ageMonths || {}).value) || 0;
+    if (years !== 0 || months !== 0) return false;
+    const ga = parseFloat((inputs.gaWeeks || {}).value);
+    const pna = parseFloat((inputs.pnaDays || {}).value);
+    return !isNaN(ga) && !isNaN(pna);
+}
 
 /**
  * Validate a single field against its rule
@@ -19,8 +33,9 @@ export function validateField(input, ruleName) {
     const rule = validationRules[ruleName];
     if (!rule) return true;
 
-    // ageMonths is always optional — skip validation if empty
-    if (ruleName === 'ageMonths' && input.value === '') {
+    // Optional fields — skip validation if empty
+    const optionalIfEmpty = ['ageMonths', 'gaWeeks', 'pnaDays'];
+    if (optionalIfEmpty.includes(ruleName) && input.value === '') {
         const group = input.closest('.input-group');
         if (group) {
             const errorEl = group.querySelector('.validation-error');
@@ -67,10 +82,15 @@ export function validateAllInputs(inputs, regimens) {
     const warnings = [];
 
     const ageYears = parseInt((inputs.ageYears || {}).value) || 0;
+    const neonatal = isNeonatalInput(inputs);
 
     for (const [name, input] of Object.entries(inputs)) {
         // ageMonths: skip if adult (≥18) or if field is empty (months always optional)
         if (name === 'ageMonths' && (ageYears >= 18 || input.value === '')) continue;
+        // gaWeeks / pnaDays: only enforce in neonatal mode (else they're optional/empty)
+        if ((name === 'gaWeeks' || name === 'pnaDays') && !neonatal && input.value === '') continue;
+        // height: relaxed in neonatal mode (length less load-bearing for Frymoyer)
+        if (name === 'height' && neonatal && input.value === '') continue;
         if (validationRules[name]) {
             valid = validateField(input, name) && valid;
         }
@@ -106,8 +126,28 @@ export function validateAllInputs(inputs, regimens) {
     }
 
     const scr = parseFloat(inputs.scr.value);
-    if ((ageYears > 85) || (weight && weight > 150) || (scr && scr < 0.4)) {
+    if (!neonatal && ((ageYears > 85) || (weight && weight > 150) || (scr && scr < 0.4))) {
         warnings.push(t.valCrclWarning);
+    }
+
+    // Neonatal-specific clinical advisories
+    if (neonatal) {
+        const pna = parseFloat((inputs.pnaDays || {}).value);
+        const ga = parseFloat((inputs.gaWeeks || {}).value);
+        if (!isNaN(pna) && pna <= 7) {
+            warnings.push(t.valNeonatalScrWarning);
+        }
+        if (!isNaN(ga) && ga < 29) {
+            warnings.push(t.valNeonatalPretermWarning);
+        }
+        if (regimens && weight) {
+            for (const r of regimens) {
+                if (r.dose / weight > 20) {
+                    warnings.push(t.valNeonatalDoseWarning);
+                    break;
+                }
+            }
+        }
     }
 
     return { valid, warnings };

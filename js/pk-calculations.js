@@ -124,10 +124,16 @@ export function calculateVdPopPediatric(weight, ageInYears) {
 }
 
 /**
- * Calculate all population PK parameters for a patient (adult or pediatric)
+ * Calculate all population PK parameters for a patient.
+ * Routes to neonatal (Frymoyer) → pediatric (Schwartz) → adult (Cockcroft-Gault) by precedence.
+ *
  * @param {number} age - Age in years (can be fractional, e.g. 0.5 for 6 months)
+ * @param {Object} [neonatal] - Optional neonatal context {gaWeeks, pnaDays}; when present, uses Frymoyer model
  */
-export function calculatePopulationPK(age, sex, height, weight, scr) {
+export function calculatePopulationPK(age, sex, height, weight, scr, neonatal) {
+    if (neonatal && typeof neonatal.gaWeeks === 'number' && typeof neonatal.pnaDays === 'number') {
+        return calculateNeonatalPK(neonatal.gaWeeks, neonatal.pnaDays, weight, scr);
+    }
     if (isPediatric(age)) {
         return calculatePediatricPK(age, sex, height, weight, scr);
     }
@@ -140,7 +146,7 @@ export function calculatePopulationPK(age, sex, height, weight, scr) {
     const vd = calculateVdPop(weight);
     const cl = kel * vd;
 
-    return { ibw, adjBw, crcl, kel, vd, cl, halfLife: calculateHalfLife(kel), pediatric: false };
+    return { ibw, adjBw, crcl, kel, vd, cl, halfLife: calculateHalfLife(kel), pediatric: false, neonate: false };
 }
 
 /**
@@ -160,8 +166,97 @@ export function calculatePediatricPK(age, sex, height, weight, scr) {
         vd,
         cl,
         halfLife: calculateHalfLife(kel),
-        pediatric: true
+        pediatric: true,
+        neonate: false
     };
+}
+
+/**
+ * Calculate postmenstrual age (weeks) from gestational age (weeks) and postnatal age (days).
+ * PMA = GA + PNA/7
+ */
+export function calculatePMA(gaWeeks, pnaDays) {
+    return gaWeeks + pnaDays / 7;
+}
+
+/**
+ * Determine if a patient is a neonate from age inputs.
+ * Conservative: PNA ≤ 28 days OR PMA ≤ 44 weeks (term + 1 month).
+ */
+export function isNeonate(gaWeeks, pnaDays) {
+    if (typeof gaWeeks !== 'number' || typeof pnaDays !== 'number') return false;
+    const pma = calculatePMA(gaWeeks, pnaDays);
+    return pnaDays <= 28 || pma <= 44;
+}
+
+/**
+ * Frymoyer 2014 vancomycin clearance model for neonates.
+ * CL (L/h) = 0.345 × (WT/2.9)^0.75 × (PMA/40.5)^1.5 × (0.34/SCr)^0.267
+ *
+ * Reference: Frymoyer A, Hersh AL, Coralic Z, Benitz WE, Roberts JK.
+ * Prediction of vancomycin pharmacokinetics in preterm and term neonates: a Bayesian approach.
+ * Pediatr Infect Dis J. 2014;33(11):1141-7.
+ */
+export function calculateFrymoyerCL(weight, pmaWeeks, scr) {
+    return 0.345
+        * Math.pow(weight / 2.9, 0.75)
+        * Math.pow(pmaWeeks / 40.5, 1.5)
+        * Math.pow(0.34 / scr, 0.267);
+}
+
+/**
+ * Neonatal volume of distribution (Frymoyer model): 0.572 L/kg.
+ */
+export function calculateVdNeonate(weight) {
+    return 0.572 * weight;
+}
+
+/**
+ * Calculate population PK for neonates (PNA ≤ 28d or PMA ≤ 44w) using Frymoyer model.
+ */
+export function calculateNeonatalPK(gaWeeks, pnaDays, weight, scr) {
+    const pma = calculatePMA(gaWeeks, pnaDays);
+    const cl = calculateFrymoyerCL(weight, pma, scr);
+    const vd = calculateVdNeonate(weight);
+    const kel = cl / vd;
+
+    return {
+        ibw: weight,
+        adjBw: weight,
+        crcl: null,         // Frymoyer doesn't compute CrCl; SCr enters CL directly
+        pma,
+        gaWeeks,
+        pnaDays,
+        kel,
+        vd,
+        cl,
+        halfLife: calculateHalfLife(kel),
+        pediatric: true,
+        neonate: true
+    };
+}
+
+/**
+ * Neonatal empirical initial dose lookup (NeoFax-style PMA × PNA table).
+ * Returns mg/kg and interval (h). For starting therapy before any TDM data is available.
+ *
+ * Reference: Bradley & Nelson's Pediatric Antimicrobial Therapy; NeoFax 2024.
+ */
+export function recommendNeonatalInitialDose(pmaWeeks, pnaDays) {
+    if (pmaWeeks < 29) {
+        return pnaDays <= 14
+            ? { mgPerKg: 15, intervalH: 24 }
+            : { mgPerKg: 15, intervalH: 12 };
+    }
+    if (pmaWeeks < 37) {
+        return pnaDays <= 14
+            ? { mgPerKg: 15, intervalH: 12 }
+            : { mgPerKg: 15, intervalH: 8 };
+    }
+    if (pmaWeeks < 45) {
+        return { mgPerKg: 15, intervalH: 8 };
+    }
+    return { mgPerKg: 10, intervalH: 6 };
 }
 
 /**

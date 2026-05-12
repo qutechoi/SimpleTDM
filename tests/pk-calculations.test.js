@@ -16,7 +16,13 @@ import {
     isPediatric,
     calculateSchwartzCrCl,
     calculateVdPopPediatric,
-    calculatePediatricPK
+    calculatePediatricPK,
+    calculatePMA,
+    isNeonate,
+    calculateFrymoyerCL,
+    calculateVdNeonate,
+    calculateNeonatalPK,
+    recommendNeonatalInitialDose
 } from '../js/pk-calculations.js';
 
 let passed = 0;
@@ -292,6 +298,105 @@ assertTrue(pkAdult.pediatric === false, 'Adult flagged as non-pediatric');
 // Pediatric AUC scenario: infant on 10mg/kg q8h = 70mg q8h
 const aucInfant = calculateAUC24(70, 8, pkInfant.cl);
 assertRange(aucInfant, 200, 800, 'Infant AUC in reasonable range for 10mg/kg q8h');
+
+// =====================================================
+// Test Suite: Neonatal — PMA & isNeonate
+// =====================================================
+console.log('\n=== Neonatal: PMA & Detection ===');
+
+// PMA = GA + PNA/7. GA=32w, PNA=14d → 32 + 2 = 34
+assertEqual(calculatePMA(32, 14), 34, 0.001, 'PMA for GA 32w + PNA 14d');
+// GA=40, PNA=0 → 40
+assertEqual(calculatePMA(40, 0), 40, 0.001, 'PMA for term newborn day 0');
+// GA=28, PNA=21 → 31
+assertEqual(calculatePMA(28, 21), 31, 0.001, 'PMA for preterm at 3 weeks of life');
+
+assertTrue(isNeonate(40, 0), 'Term newborn detected as neonate');
+assertTrue(isNeonate(32, 14), 'Late preterm at 2w PNA detected as neonate');
+assertTrue(isNeonate(28, 28), 'Preterm at 28d PNA still neonate');
+assertTrue(!isNeonate(undefined, undefined), 'Missing GA/PNA → not neonate');
+
+// =====================================================
+// Test Suite: Frymoyer CL & Neonatal Vd
+// =====================================================
+console.log('\n=== Frymoyer Clearance ===');
+
+// Reference calc — term neonate, 3 kg, PMA 40w, SCr 0.5
+//   CL = 0.345 * (3/2.9)^0.75 * (40/40.5)^1.5 * (0.34/0.5)^0.267
+//      = 0.345 * 1.0258 * 0.9815 * 0.9006
+//      ≈ 0.3127 L/h
+const clTerm = calculateFrymoyerCL(3.0, 40, 0.5);
+assertRange(clTerm, 0.28, 0.34, 'Frymoyer CL: term 3 kg, PMA 40, SCr 0.5');
+
+// Preterm, 1.5 kg, PMA 32w, SCr 0.6
+//   CL ≈ 0.345 * (1.5/2.9)^0.75 * (32/40.5)^1.5 * (0.34/0.6)^0.267
+//      ≈ 0.345 * 0.610 * 0.702 * 0.864 ≈ 0.128 L/h
+const clPreterm = calculateFrymoyerCL(1.5, 32, 0.6);
+assertRange(clPreterm, 0.10, 0.16, 'Frymoyer CL: preterm 1.5 kg, PMA 32, SCr 0.6');
+
+// Higher SCr → lower CL (sanity)
+const clHighScr = calculateFrymoyerCL(3.0, 40, 1.0);
+assertTrue(clHighScr < clTerm, 'Higher SCr lowers Frymoyer CL');
+
+// Higher PMA → higher CL (maturation)
+const clMature = calculateFrymoyerCL(3.0, 44, 0.5);
+assertTrue(clMature > clTerm, 'Higher PMA raises Frymoyer CL');
+
+console.log('\n=== Neonatal Vd ===');
+assertEqual(calculateVdNeonate(3.0), 1.716, 0.001, 'Neonatal Vd: 3 kg × 0.572');
+assertEqual(calculateVdNeonate(1.0), 0.572, 0.001, 'Neonatal Vd: 1 kg × 0.572');
+
+// =====================================================
+// Test Suite: Integrated Neonatal PK
+// =====================================================
+console.log('\n=== Integrated Neonatal PK ===');
+
+const pkNeo = calculateNeonatalPK(40, 7, 3.0, 0.5);
+assertTrue(pkNeo.neonate === true, 'Neonatal PK flagged as neonate');
+assertTrue(pkNeo.pediatric === true, 'Neonatal PK also flagged as pediatric');
+assertEqual(pkNeo.pma, 41, 0.001, 'PMA computed from GA 40, PNA 7');
+assertRange(pkNeo.cl, 0.30, 0.40, 'Neonatal CL in expected range');
+assertRange(pkNeo.vd, 1.7, 1.75, 'Neonatal Vd in expected range');
+assertRange(pkNeo.kel, 0.15, 0.25, 'Neonatal kel in expected range');
+assertRange(pkNeo.halfLife, 2.5, 5, 'Neonatal half-life in expected range');
+
+// Through routing via calculatePopulationPK
+const pkRouted = calculatePopulationPK(0, 'male', 50, 3.0, 0.5, { gaWeeks: 40, pnaDays: 7 });
+assertTrue(pkRouted.neonate === true, 'calculatePopulationPK routes to neonatal when GA/PNA passed');
+assertEqual(pkRouted.cl, pkNeo.cl, 0.001, 'Routed CL matches direct neonatal CL');
+
+// Without neonatal ctx, age 0.02y falls back to pediatric Schwartz path
+const pkPedFallback = calculatePopulationPK(0.02, 'male', 50, 3.0, 0.5);
+assertTrue(pkPedFallback.neonate === false, 'No GA/PNA → not neonate (pediatric fallback)');
+
+// =====================================================
+// Test Suite: Empirical Dose Recommendation Table
+// =====================================================
+console.log('\n=== Neonatal Empirical Dose Lookup ===');
+
+// <29w PMA, ≤14d PNA → 15 mg/kg q24h
+let rec = recommendNeonatalInitialDose(27, 5);
+assertTrue(rec.mgPerKg === 15 && rec.intervalH === 24, 'Extreme preterm early life → 15 mg/kg q24h');
+
+// <29w PMA, >14d PNA → 15 mg/kg q12h
+rec = recommendNeonatalInitialDose(27, 20);
+assertTrue(rec.mgPerKg === 15 && rec.intervalH === 12, 'Extreme preterm older → 15 mg/kg q12h');
+
+// 30w PMA, ≤14d → 15 mg/kg q12h
+rec = recommendNeonatalInitialDose(30, 10);
+assertTrue(rec.mgPerKg === 15 && rec.intervalH === 12, 'Preterm 30w early → 15 mg/kg q12h');
+
+// 32w PMA, >14d → 15 mg/kg q8h
+rec = recommendNeonatalInitialDose(32, 20);
+assertTrue(rec.mgPerKg === 15 && rec.intervalH === 8, 'Preterm 32w older → 15 mg/kg q8h');
+
+// 40w PMA → 15 mg/kg q8h
+rec = recommendNeonatalInitialDose(40, 0);
+assertTrue(rec.mgPerKg === 15 && rec.intervalH === 8, 'Term newborn → 15 mg/kg q8h');
+
+// 46w PMA → 10 mg/kg q6h
+rec = recommendNeonatalInitialDose(46, 14);
+assertTrue(rec.mgPerKg === 10 && rec.intervalH === 6, 'Beyond term (>45w) → 10 mg/kg q6h');
 
 // =====================================================
 // Summary

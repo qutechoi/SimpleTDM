@@ -1,10 +1,16 @@
 // app.js - Main Application Entry Point
 
 import { getLang, setLang, t as getT, applyLanguage } from './i18n.js';
-import { calculatePopulationPK, calculatePeakSS, calculateTroughSS, calculateAUC24 } from './pk-calculations.js';
+import {
+    calculatePopulationPK, calculatePeakSS, calculateTroughSS, calculateAUC24,
+    calculatePMA, recommendNeonatalInitialDose
+} from './pk-calculations.js';
 import { multiPointBayesianFit } from './bayesian-fitting.js';
 import { updateChartExtended, updateChartTheme, updateChartLanguage } from './chart.js';
-import { validateAllInputs, validateRegimens, setupRealtimeValidation, validateField } from './validation.js';
+import {
+    validateAllInputs, validateRegimens, setupRealtimeValidation, validateField,
+    isNeonatalInput
+} from './validation.js';
 import { appendHistory, getHistory, filterByDateRange, deleteHistory, clearHistory, exportToCsv } from './history.js';
 
 let currentTheme = localStorage.getItem('theme') || 'light';
@@ -42,20 +48,78 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputs = {
         ageYears: document.getElementById('ageYears'),
         ageMonths: document.getElementById('ageMonths'),
+        gaWeeks: document.getElementById('gaWeeks'),
+        pnaDays: document.getElementById('pnaDays'),
         sex: document.getElementById('sex'),
         height: document.getElementById('height'),
         weight: document.getElementById('weight'),
         scr: document.getElementById('scr')
     };
     const pediatricHint = document.getElementById('pediatricHint');
+    const neonatalHint = document.getElementById('neonatalHint');
+    const neonatalSection = document.getElementById('neonatalSection');
+    const pmaDisplay = document.getElementById('pmaDisplay');
+    const empiricalDoseBox = document.getElementById('empiricalDoseBox');
+    const empiricalDoseText = document.getElementById('empiricalDoseText');
 
-    // Show/hide pediatric hint based on age
-    function updatePediatricHint() {
-        const years = parseInt(inputs.ageYears.value) || 0;
-        pediatricHint.style.display = years < 18 ? 'block' : 'none';
+    // Show/hide hints and neonatal section based on age inputs
+    function updateAgeModeUi() {
+        const t = getT();
+        const yearsRaw = inputs.ageYears.value;
+        const monthsRaw = inputs.ageMonths.value;
+        const years = parseInt(yearsRaw);
+        const months = parseInt(monthsRaw) || 0;
+        const isYoungInfant = yearsRaw !== '' && years === 0 && months === 0;
+
+        neonatalSection.style.display = isYoungInfant ? 'block' : 'none';
+        neonatalHint.style.display = isYoungInfant ? 'block' : 'none';
+        pediatricHint.style.display = (!isYoungInfant && yearsRaw !== '' && years < 18) ? 'block' : 'none';
+
+        if (isYoungInfant) {
+            updatePmaAndEmpiricalDose();
+        } else {
+            empiricalDoseBox.style.display = 'none';
+            pmaDisplay.textContent = t.pmaHint;
+        }
     }
-    inputs.ageYears.addEventListener('input', updatePediatricHint);
-    inputs.ageMonths.addEventListener('input', updatePediatricHint);
+
+    function updatePmaAndEmpiricalDose() {
+        const t = getT();
+        const ga = parseFloat(inputs.gaWeeks.value);
+        const pna = parseFloat(inputs.pnaDays.value);
+        const weight = parseFloat(inputs.weight.value);
+
+        if (isNaN(ga) || isNaN(pna)) {
+            pmaDisplay.textContent = t.pmaHint;
+            empiricalDoseBox.style.display = 'none';
+            return;
+        }
+
+        const pma = calculatePMA(ga, pna);
+        pmaDisplay.textContent = t.pmaComputed.replace('%PMA%', pma.toFixed(1));
+
+        if (weight && weight > 0) {
+            const rec = recommendNeonatalInitialDose(pma, pna);
+            const doseMg = Math.round(rec.mgPerKg * weight * 10) / 10;
+            empiricalDoseText.textContent = `${t.empiricalDoseLabel}: ` + t.empiricalDoseText
+                .replace('%DOSE_MG%', doseMg.toString())
+                .replace('%INTERVAL%', rec.intervalH.toString())
+                .replace('%MGKG%', rec.mgPerKg.toString())
+                .replace('%PMA%', pma.toFixed(1))
+                .replace('%PNA%', pna.toString());
+            empiricalDoseBox.style.display = 'block';
+        } else {
+            empiricalDoseBox.style.display = 'none';
+        }
+    }
+
+    inputs.ageYears.addEventListener('input', updateAgeModeUi);
+    inputs.ageMonths.addEventListener('input', updateAgeModeUi);
+    inputs.gaWeeks.addEventListener('input', updatePmaAndEmpiricalDose);
+    inputs.pnaDays.addEventListener('input', updatePmaAndEmpiricalDose);
+    inputs.weight.addEventListener('input', () => {
+        if (isNeonatalInput(inputs)) updatePmaAndEmpiricalDose();
+    });
 
     const outputs = {
         aucValue: document.getElementById('aucValue'),
@@ -316,7 +380,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const weight = parseFloat(inputs.weight.value);
         const scr = parseFloat(inputs.scr.value);
 
-        if (inputs.ageYears.value === '' || !height || !weight || !scr) {
+        const neonatal = isNeonatalInput(inputs);
+        const neonatalCtx = neonatal ? {
+            gaWeeks: parseFloat(inputs.gaWeeks.value),
+            pnaDays: parseFloat(inputs.pnaDays.value)
+        } : null;
+
+        // Height is optional in neonatal mode (not used by Frymoyer); otherwise required.
+        const heightOk = neonatal ? true : !!height;
+        if (inputs.ageYears.value === '' || !heightOk || !weight || !scr) {
             alert(t.fillAllFields);
             return;
         }
@@ -360,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Population PK (patient-level, regimen-independent)
-        const popPK = calculatePopulationPK(age, sex, height, weight, scr);
+        const popPK = calculatePopulationPK(age, sex, height, weight, scr, neonatalCtx);
         const populationPK = { kel: popPK.kel, vd: popPK.vd };
 
         // Bayesian fitting using the full regimen sequence
@@ -380,7 +452,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus(auc24, troughSS);
         displayFitQuality(fitQuality);
         updateChartExtended(peakSS, kel, vd, regimens, measurements, currentTheme, individualizedPK);
-        generateSpecificDoseRecommendations(individualizedPK, lastRegimen.dose, lastRegimen.interval);
+        generateSpecificDoseRecommendations(individualizedPK, lastRegimen.dose, lastRegimen.interval, {
+            neonate: popPK.neonate,
+            weight
+        });
 
         document.getElementById('resultsSection').style.display = 'block';
         document.getElementById('simulationBox').style.display = 'block';
@@ -397,7 +472,11 @@ document.addEventListener('DOMContentLoaded', () => {
         appendHistory({
             patient: {
                 ageYears, ageMonths, sex, height, weight, scr,
-                pediatric: popPK.pediatric
+                pediatric: popPK.pediatric,
+                neonate: popPK.neonate,
+                gaWeeks: neonatalCtx ? neonatalCtx.gaWeeks : null,
+                pnaDays: neonatalCtx ? neonatalCtx.pnaDays : null,
+                pma: popPK.pma || null
             },
             regimens: regimens.map(r => ({
                 dose: r.dose,
@@ -457,18 +536,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // Dose Recommendations
     // ==========================================
-    function generateSpecificDoseRecommendations(pk, currentDose, currentInterval) {
+    function generateSpecificDoseRecommendations(pk, currentDose, currentInterval, opts = {}) {
         const t = getT();
         const container = document.getElementById('doseOptions');
 
-        const doseOptions = [
-            { dose: 500, interval: 8 }, { dose: 750, interval: 8 }, { dose: 1000, interval: 8 },
-            { dose: 500, interval: 12 }, { dose: 750, interval: 12 }, { dose: 1000, interval: 12 },
-            { dose: 1250, interval: 12 }, { dose: 1500, interval: 12 },
-            { dose: 1000, interval: 24 }, { dose: 1250, interval: 24 },
-            { dose: 1500, interval: 24 }, { dose: 1750, interval: 24 },
-            { dose: currentDose, interval: currentInterval, isCurrent: true }
-        ];
+        let doseOptions;
+        if (opts.neonate && opts.weight) {
+            // Neonatal mg/kg-based options. Round to 0.5 mg increments for syringe practicality.
+            const w = opts.weight;
+            const roundDose = (mgkg, h) => ({
+                dose: Math.round(mgkg * w * 2) / 2,
+                interval: h,
+                mgPerKg: mgkg
+            });
+            doseOptions = [
+                roundDose(10, 6), roundDose(10, 8), roundDose(10, 12),
+                roundDose(15, 6), roundDose(15, 8), roundDose(15, 12), roundDose(15, 24),
+                roundDose(20, 8), roundDose(20, 12), roundDose(20, 24),
+                { dose: currentDose, interval: currentInterval, isCurrent: true,
+                  mgPerKg: Math.round((currentDose / w) * 10) / 10 }
+            ];
+        } else {
+            doseOptions = [
+                { dose: 500, interval: 8 }, { dose: 750, interval: 8 }, { dose: 1000, interval: 8 },
+                { dose: 500, interval: 12 }, { dose: 750, interval: 12 }, { dose: 1000, interval: 12 },
+                { dose: 1250, interval: 12 }, { dose: 1500, interval: 12 },
+                { dose: 1000, interval: 24 }, { dose: 1250, interval: 24 },
+                { dose: 1500, interval: 24 }, { dose: 1750, interval: 24 },
+                { dose: currentDose, interval: currentInterval, isCurrent: true }
+            ];
+        }
 
         const results = doseOptions.map(option => {
             const totalDailyDose = (24 / option.interval) * option.dose;
@@ -504,7 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${filtered.slice(0, 8).map(r => `
                 <div class="dose-option ${r.isRecommended ? 'recommended' : ''} ${r.isCurrent ? 'current' : ''}">
                     <div class="dose-option-label">
-                        ${r.dose}mg q${r.interval}h
+                        ${r.dose}mg q${r.interval}h${r.mgPerKg ? ` <small>(${r.mgPerKg} mg/kg)</small>` : ''}
                         ${r.isCurrent ? `<span class="current-badge">${t.currentRegimen}</span>` : ''}
                     </div>
                     <div class="dose-option-auc"><strong>${r.auc24.toFixed(0)}</strong> mg·h/L</div>
@@ -720,7 +817,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        updatePediatricHint();
+        updateAgeModeUi();
         alert(t.dataLoaded);
     }
 
@@ -745,7 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('doseRecommendationsBox').style.display = 'none';
         document.getElementById('recommendationText').textContent = t.recommendationPlaceholder;
 
-        updatePediatricHint();
+        updateAgeModeUi();
     }
 
     // ==========================================
@@ -789,9 +886,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const regimenLabel = regimens.length > 1
                 ? `${last.dose}mg q${last.interval}h (×${regimens.length})`
                 : `${last.dose}mg q${last.interval}h`;
-            const ageLabel = p.pediatric && p.ageMonths
-                ? `${p.ageYears}y${p.ageMonths}m`
-                : `${p.ageYears}y`;
+            let ageLabel;
+            if (p.neonate) {
+                ageLabel = `${p.gaWeeks}w GA / ${p.pnaDays}d PNA`;
+            } else if (p.pediatric && p.ageMonths) {
+                ageLabel = `${p.ageYears}y${p.ageMonths}m`;
+            } else {
+                ageLabel = `${p.ageYears}y`;
+            }
             return `
                 <tr>
                     <td>${formatTs(r.timestamp)}</td>
@@ -877,6 +979,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('language', newLang);
         reindexRegimens();
         reindexMeasurements();
+        updateAgeModeUi();
         updateChartLanguage();
     });
 });
