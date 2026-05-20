@@ -159,7 +159,9 @@ export const translations = {
         historyEmpty: 'No records in the selected range.',
         historyConfirmDelete: 'Delete this record?',
         historyConfirmClear: 'Delete ALL history? This cannot be undone.',
-        historyNothingToExport: 'No records to export.'
+        historyNothingToExport: 'No records to export.',
+        historyLoad: 'Load',
+        historyConfirmLoad: 'Load this record into the form? Current input values will be overwritten.'
     },
     ko: {
         title: '반코마이신 TDM 계산기',
@@ -319,7 +321,9 @@ export const translations = {
         historyEmpty: '선택한 기간에 기록이 없습니다.',
         historyConfirmDelete: '이 기록을 삭제하시겠습니까?',
         historyConfirmClear: '모든 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.',
-        historyNothingToExport: '내보낼 기록이 없습니다.'
+        historyNothingToExport: '내보낼 기록이 없습니다.',
+        historyLoad: '불러오기',
+        historyConfirmLoad: '이 기록을 폼에 불러오시겠습니까? 현재 입력값이 덮어씌워집니다.'
     }
 };
 

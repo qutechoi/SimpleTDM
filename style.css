@@ -1094,16 +1094,27 @@ input:-webkit-autofill:active {
     padding: 2rem;
 }
 
+.history-actions {
+    display: flex;
+    gap: 0.25rem;
+    justify-content: flex-end;
+    white-space: nowrap;
+}
+
+.history-load-btn,
 .history-delete-btn {
     background: transparent;
     border: none;
-    color: #ef4444;
     cursor: pointer;
     font-size: 0.9rem;
     padding: 0.2rem 0.4rem;
     border-radius: var(--radius-sm);
 }
 
+.history-load-btn { color: var(--accent-primary, #3b82f6); }
+.history-load-btn:hover { background: rgba(59, 130, 246, 0.12); }
+
+.history-delete-btn { color: #ef4444; }
 .history-delete-btn:hover { background: rgba(239, 68, 68, 0.12); }
 
 .history-footer {

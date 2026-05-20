@@ -769,30 +769,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadPatientData() {
-        const t = getT();
-        const saved = localStorage.getItem('tdm_patient_data');
-        if (!saved) {
-            alert(t.noSavedData);
-            return;
+        openHistoryModal();
+    }
+
+    function isoToDatetimeLocal(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function loadFromHistoryRecord(record) {
+        const p = record.patient || {};
+        const patientMap = {
+            ageYears: p.ageYears,
+            ageMonths: p.ageMonths,
+            gaWeeks: p.gaWeeks,
+            pnaDays: p.pnaDays,
+            sex: p.sex,
+            height: p.height,
+            weight: p.weight,
+            scr: p.scr
+        };
+        for (const [key, val] of Object.entries(patientMap)) {
+            if (!inputs[key]) continue;
+            inputs[key].value = (val == null) ? '' : String(val);
         }
 
-        if (!confirm(t.confirmLoad)) return;
-
-        const data = JSON.parse(saved);
-        for (const [key, input] of Object.entries(inputs)) {
-            if (data[key] !== undefined) input.value = data[key];
-        }
-
-        // Restore regimens (with backward compat for legacy single-regimen schema)
-        let regimensData = data.regimens;
-        if (!regimensData && data.dose) {
-            regimensData = [{
-                dose: data.dose,
-                interval: data.interval,
-                startTime: data.startTime
-            }];
-        }
-        if (!regimensData || regimensData.length === 0) {
+        // Backward compat: pre-multi-regimen records used `r.dosing`
+        let regimensData = record.regimens || (record.dosing ? [record.dosing] : []);
+        if (regimensData.length === 0) {
             regimensData = [{ dose: '', interval: '', startTime: '' }];
         }
         const regContainer = document.getElementById('regimensContainer');
@@ -800,25 +807,24 @@ document.addEventListener('DOMContentLoaded', () => {
         regimensData.forEach((r, i) => {
             const entry = createRegimenEntry(i);
             regContainer.appendChild(entry);
-            entry.querySelector('.regimen-dose').value = r.dose || '';
-            entry.querySelector('.regimen-interval').value = r.interval || '';
-            entry.querySelector('.regimen-start').value = r.startTime || '';
+            entry.querySelector('.regimen-dose').value = r.dose ?? '';
+            entry.querySelector('.regimen-interval').value = r.interval ?? '';
+            entry.querySelector('.regimen-start').value = isoToDatetimeLocal(r.startTime);
         });
 
-        if (data.measurements && data.measurements.length > 0) {
-            const container = document.getElementById('measurementsContainer');
-            container.innerHTML = '';
-
-            data.measurements.forEach((m, i) => {
-                const entry = createMeasurementEntry(i);
-                container.appendChild(entry);
-                if (m.time) entry.querySelector('.sample-time').value = m.time;
-                if (m.conc) entry.querySelector('.measured-conc').value = m.conc;
-            });
-        }
+        const measurements = record.measurements || [];
+        const measContainer = document.getElementById('measurementsContainer');
+        measContainer.innerHTML = '';
+        const measList = measurements.length > 0 ? measurements : [{}];
+        measList.forEach((m, i) => {
+            const entry = createMeasurementEntry(i);
+            measContainer.appendChild(entry);
+            if (m.time) entry.querySelector('.sample-time').value = isoToDatetimeLocal(m.time);
+            const conc = m.concentration ?? m.conc;
+            if (conc != null) entry.querySelector('.measured-conc').value = conc;
+        });
 
         updateAgeModeUi();
-        alert(t.dataLoaded);
     }
 
     function resetPatientData() {
@@ -901,7 +907,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${regimenLabel}</td>
                     <td>${typeof res.auc24 === 'number' ? res.auc24.toFixed(1) : '-'}</td>
                     <td>${typeof res.trough === 'number' ? res.trough.toFixed(1) : '-'}</td>
-                    <td><button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button></td>
+                    <td class="history-actions">
+                        <button class="history-load-btn" data-id="${r.id}" aria-label="${t.historyLoad}" title="${t.historyLoad}">📂</button>
+                        <button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button>
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -917,11 +926,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     historyTableBody.addEventListener('click', (e) => {
-        const btn = e.target.closest('.history-delete-btn');
-        if (!btn) return;
+        const loadBtn = e.target.closest('.history-load-btn');
+        if (loadBtn) {
+            const t = getT();
+            if (!confirm(t.historyConfirmLoad)) return;
+            const record = getHistory().find(r => r.id === loadBtn.dataset.id);
+            if (!record) return;
+            loadFromHistoryRecord(record);
+            closeHistoryModal();
+            return;
+        }
+        const delBtn = e.target.closest('.history-delete-btn');
+        if (!delBtn) return;
         const t = getT();
         if (!confirm(t.historyConfirmDelete)) return;
-        deleteHistory(btn.dataset.id);
+        deleteHistory(delBtn.dataset.id);
         renderHistoryTable();
     });
 
