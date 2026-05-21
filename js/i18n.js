@@ -161,7 +161,9 @@ export const translations = {
         historyConfirmClear: 'Delete ALL history? This cannot be undone.',
         historyNothingToExport: 'No records to export.',
         historyLoad: 'Load',
-        historyConfirmLoad: 'Load this record into the form? Current input values will be overwritten.'
+        historyConfirmLoad: 'Load this record into the form? Current input values will be overwritten.',
+        historySelectTitle: 'Load from History',
+        historySelectHint: 'Pick a record below to restore it into the form.'
     },
     ko: {
         title: '반코마이신 TDM 계산기',
@@ -323,7 +325,9 @@ export const translations = {
         historyConfirmClear: '모든 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.',
         historyNothingToExport: '내보낼 기록이 없습니다.',
         historyLoad: '불러오기',
-        historyConfirmLoad: '이 기록을 폼에 불러오시겠습니까? 현재 입력값이 덮어씌워집니다.'
+        historyConfirmLoad: '이 기록을 폼에 불러오시겠습니까? 현재 입력값이 덮어씌워집니다.',
+        historySelectTitle: '기록에서 불러오기',
+        historySelectHint: '아래 기록 중 폼에 복원할 항목을 선택하세요.'
     }
 };
 

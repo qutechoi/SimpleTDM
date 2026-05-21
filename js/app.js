@@ -769,7 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadPatientData() {
-        openHistoryModal();
+        openHistoryModal('select');
     }
 
     function isoToDatetimeLocal(iso) {
@@ -873,6 +873,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
+    let historyMode = 'view'; // 'view' | 'select'
+    const historyTitleEl = document.getElementById('historyTitle');
+    const historySelectHintEl = document.getElementById('historySelectHint');
+
     function renderHistoryTable() {
         const t = getT();
         const records = currentFilteredRecords().slice().reverse();
@@ -900,37 +904,46 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 ageLabel = `${p.ageYears}y`;
             }
+            const actionCell = historyMode === 'select'
+                ? `<button class="history-select-btn" data-id="${r.id}">${t.historyLoad}</button>`
+                : `<button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button>`;
+            const rowClass = historyMode === 'select' ? ' class="history-row-select"' : '';
             return `
-                <tr>
+                <tr${rowClass}>
                     <td>${formatTs(r.timestamp)}</td>
                     <td>${ageLabel} / ${p.sex === 'male' ? 'M' : 'F'} / ${p.weight}kg</td>
                     <td>${regimenLabel}</td>
                     <td>${typeof res.auc24 === 'number' ? res.auc24.toFixed(1) : '-'}</td>
                     <td>${typeof res.trough === 'number' ? res.trough.toFixed(1) : '-'}</td>
-                    <td class="history-actions">
-                        <button class="history-load-btn" data-id="${r.id}" aria-label="${t.historyLoad}" title="${t.historyLoad}">📂</button>
-                        <button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button>
-                    </td>
+                    <td class="history-actions">${actionCell}</td>
                 </tr>
             `;
         }).join('');
     }
 
-    function openHistoryModal() {
+    function openHistoryModal(mode = 'view') {
+        historyMode = mode;
+        // Swap the title's i18n key so language toggle stays correct while open.
+        historyTitleEl.setAttribute('data-i18n', mode === 'select' ? 'historySelectTitle' : 'historyTitle');
+        if (historySelectHintEl) historySelectHintEl.classList.toggle('hidden', mode !== 'select');
+        applyLanguage();
         historyModal.classList.remove('hidden');
         renderHistoryTable();
     }
 
     function closeHistoryModal() {
         historyModal.classList.add('hidden');
+        historyMode = 'view';
+        historyTitleEl.setAttribute('data-i18n', 'historyTitle');
+        if (historySelectHintEl) historySelectHintEl.classList.add('hidden');
     }
 
     historyTableBody.addEventListener('click', (e) => {
-        const loadBtn = e.target.closest('.history-load-btn');
-        if (loadBtn) {
+        const selectBtn = e.target.closest('.history-select-btn');
+        if (selectBtn) {
             const t = getT();
             if (!confirm(t.historyConfirmLoad)) return;
-            const record = getHistory().find(r => r.id === loadBtn.dataset.id);
+            const record = getHistory().find(r => r.id === selectBtn.dataset.id);
             if (!record) return;
             loadFromHistoryRecord(record);
             closeHistoryModal();
@@ -980,7 +993,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loadDataBtn').addEventListener('click', loadPatientData);
     document.getElementById('printBtn').addEventListener('click', () => window.print());
     document.getElementById('resetBtn').addEventListener('click', resetPatientData);
-    document.getElementById('historyBtn').addEventListener('click', openHistoryModal);
+    document.getElementById('historyBtn').addEventListener('click', () => openHistoryModal('view'));
 
     themeToggle.addEventListener('click', () => {
         currentTheme = currentTheme === 'light' ? 'dark' : 'light';
