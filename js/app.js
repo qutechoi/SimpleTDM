@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const calculateBtn = document.getElementById('calculateBtn');
     const inputs = {
+        patientName: document.getElementById('patientName'),
         ageYears: document.getElementById('ageYears'),
         ageMonths: document.getElementById('ageMonths'),
         gaWeeks: document.getElementById('gaWeeks'),
@@ -471,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         appendHistory({
             patient: {
+                name: (inputs.patientName.value || '').trim() || null,
                 ageYears, ageMonths, sex, height, weight, scr,
                 pediatric: popPK.pediatric,
                 neonate: popPK.neonate,
@@ -783,6 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadFromHistoryRecord(record) {
         const p = record.patient || {};
         const patientMap = {
+            patientName: p.name,
             ageYears: p.ageYears,
             ageMonths: p.ageMonths,
             gaWeeks: p.gaWeeks,
@@ -873,6 +876,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
     let historyMode = 'view'; // 'view' | 'select'
     const historyTitleEl = document.getElementById('historyTitle');
     const historySelectHintEl = document.getElementById('historySelectHint');
@@ -883,7 +892,7 @@ document.addEventListener('DOMContentLoaded', () => {
         historySummary.textContent = `${t.historyCount}: ${records.length}`;
 
         if (records.length === 0) {
-            historyTableBody.innerHTML = `<tr><td colspan="6" class="history-empty">${t.historyEmpty}</td></tr>`;
+            historyTableBody.innerHTML = `<tr><td colspan="7" class="history-empty">${t.historyEmpty}</td></tr>`;
             return;
         }
 
@@ -908,8 +917,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<button class="history-select-btn" data-id="${r.id}">${t.historyLoad}</button>`
                 : `<button class="history-delete-btn" data-id="${r.id}" aria-label="Delete">✕</button>`;
             const rowClass = historyMode === 'select' ? ' class="history-row-select"' : '';
+            const nameCell = p.name ? escapeHtml(p.name) : '<span class="history-name-empty">—</span>';
             return `
                 <tr${rowClass}>
+                    <td class="history-name-cell">${nameCell}</td>
                     <td>${formatTs(r.timestamp)}</td>
                     <td>${ageLabel} / ${p.sex === 'male' ? 'M' : 'F'} / ${p.weight}kg</td>
                     <td>${regimenLabel}</td>

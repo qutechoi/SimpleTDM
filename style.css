@@ -1101,6 +1101,17 @@ input:-webkit-autofill:active {
     white-space: nowrap;
 }
 
+.history-name-cell {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+.history-name-empty {
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
 .history-delete-btn {
     background: transparent;
     border: none;

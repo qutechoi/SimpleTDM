@@ -46,7 +46,7 @@ export function filterByDateRange(from, to) {
 const CSV_LOCALES = {
     en: {
         headers: [
-            'Timestamp', 'AgeYears', 'AgeMonths', 'Sex', 'Pediatric',
+            'Name', 'Timestamp', 'AgeYears', 'AgeMonths', 'Sex', 'Pediatric',
             'Height_cm', 'Weight_kg', 'SCr_mg_dL',
             'CurrentDose_mg', 'CurrentInterval_h', 'FirstDoseTime', 'RegimenCount', 'Regimens', 'MeasurementCount',
             'AUC24', 'Trough_mg_L', 'Peak_mg_L', 'Clearance_L_h',
@@ -60,7 +60,7 @@ const CSV_LOCALES = {
     },
     ko: {
         headers: [
-            '일시', '나이(세)', '나이(개월)', '성별', '환자구분',
+            '이름', '일시', '나이(세)', '나이(개월)', '성별', '환자구분',
             '키(cm)', '체중(kg)', '혈청크레아티닌(mg/dL)',
             '현재용량(mg)', '현재간격(h)', '첫투약시간', '요법수', '요법내역', '측정횟수',
             'AUC24', 'Trough(mg/L)', 'Peak(mg/L)', '청소율(L/h)',
@@ -108,6 +108,7 @@ function recordToRow(r, locale) {
     const effKey = assessEffectiveness(res.auc24);
     const toxKey = assessToxicity(res.auc24, res.trough);
     return [
+        p.name ?? '',
         r.timestamp,
         p.ageYears, p.ageMonths ?? '',
         locale.sex[p.sex] ?? p.sex ?? '',

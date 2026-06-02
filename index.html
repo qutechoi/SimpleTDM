@@ -100,6 +100,11 @@
                     <!-- Patient Demographics -->
                     <div class="form-group-title" data-i18n="patientDemo">Patient Demographics</div>
                     <div class="grid-2">
+                        <div class="input-group full-width">
+                            <label for="patientName" data-i18n="patientName">Name / Label</label>
+                            <input type="text" id="patientName" maxlength="40" autocomplete="off" data-placeholder="patientNamePlaceholder">
+                            <small class="hint" data-i18n="patientNameHint">Optional. Used only to distinguish records in Save / Load / History.</small>
+                        </div>
                         <div class="input-group">
                             <label data-i18n="age">Age</label>
                             <div class="age-input-row">
@@ -317,6 +322,7 @@
                 <table class="history-table">
                     <thead>
                         <tr>
+                            <th data-i18n="historyColName">Name</th>
                             <th data-i18n="historyColDate">Date/Time</th>
                             <th data-i18n="historyColPatient">Patient</th>
                             <th data-i18n="historyColRegimen">Regimen</th>
