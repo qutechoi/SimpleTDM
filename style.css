@@ -491,6 +491,18 @@ input:-webkit-autofill:active {
     height: 16px;
 }
 
+.lang-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
 /* Multi-Measurement Styles */
 .monitoring-section {
     margin-top: 0.5rem;

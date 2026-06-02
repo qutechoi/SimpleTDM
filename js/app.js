@@ -149,12 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.documentElement.setAttribute('data-theme', currentTheme);
 
         if (currentTheme === 'dark') {
-            sunIcon.style.display = 'none';
-            moonIcon.style.display = 'block';
-            if (themeToggleText) themeToggleText.textContent = t.themeToggleBright;
-        } else {
             sunIcon.style.display = 'block';
             moonIcon.style.display = 'none';
+            if (themeToggleText) themeToggleText.textContent = t.themeToggleBright;
+        } else {
+            sunIcon.style.display = 'none';
+            moonIcon.style.display = 'block';
             if (themeToggleText) themeToggleText.textContent = t.themeToggle;
         }
     }
