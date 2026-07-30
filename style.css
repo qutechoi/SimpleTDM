@@ -956,6 +956,12 @@ input:-webkit-autofill:active {
     padding: 1rem;
 }
 
+/* Generic hide utility. Previously only `.modal-overlay.hidden` existed, so
+   `classList.toggle('hidden')` on anything else had no visual effect. */
+.hidden {
+    display: none;
+}
+
 .modal-overlay.hidden {
     display: none;
 }
@@ -1272,8 +1278,18 @@ input:-webkit-autofill:active {
 
 .history-footer {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     justify-content: flex-end;
+}
+
+/* .btn-primary is width:100% for the full-width calculate button. In the
+   footer that makes one button hog the row and squeeze the rest until their
+   labels wrap vertically ("복 원"), so size footer buttons to their text. */
+.history-footer button {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .history-footer .btn-danger {

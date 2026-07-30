@@ -339,10 +339,17 @@
             </div>
             <div class="history-footer">
                 <button id="historyExportBtn" class="btn-primary" data-i18n="historyExport">Export CSV</button>
+                <button id="historyBackupBtn" class="btn-secondary" data-i18n="historyBackup">Backup (JSON)</button>
+                <button id="historyRestoreBtn" class="btn-secondary" data-i18n="historyRestore">Restore</button>
                 <button id="historyClearBtn" class="btn-secondary btn-danger" data-i18n="historyClear">Clear All</button>
             </div>
         </div>
     </div>
+
+    <!-- Backup restore picker. Kept outside the modal so it survives closing it.
+         Uses the `hidden` attribute, not a CSS class, so a stale cached
+         stylesheet can never leave a stray file input on screen. -->
+    <input type="file" id="importFileInput" hidden accept="application/json,.json" tabindex="-1" aria-hidden="true">
 
     <script type="module" src="js/app.js"></script>
     <script>

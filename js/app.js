@@ -11,7 +11,10 @@ import {
     validateAllInputs, validateRegimens, setupRealtimeValidation, validateField,
     isNeonatalInput
 } from './validation.js';
-import { appendHistory, getHistory, filterByDateRange, deleteHistory, clearHistory, exportToCsv } from './history.js';
+import {
+    appendHistory, getHistory, filterByDateRange, deleteHistory, clearHistory,
+    exportToCsv, exportToJson, parseBackup, mergeHistory
+} from './history.js';
 
 let currentTheme = localStorage.getItem('theme') || 'light';
 let individualizedPK = null;
@@ -1146,6 +1149,74 @@ document.addEventListener('DOMContentLoaded', () => {
         const stamp = new Date().toISOString().slice(0, 10);
         exportToCsv(records, `tdm_history_${stamp}.csv`, getLang());
     });
+
+    // Backup deliberately ignores the date filter. The filter shapes the CSV
+    // report, but a silently partial backup is a trap when moving devices.
+    document.getElementById('historyBackupBtn').addEventListener('click', () => {
+        const t = getT();
+        const records = getHistory();
+        if (records.length === 0) {
+            alert(t.historyNothingToBackup);
+            return;
+        }
+        const stamp = new Date().toISOString().slice(0, 10);
+        exportToJson(records, `tdm_backup_${stamp}.json`);
+    });
+
+    const importFileInput = document.getElementById('importFileInput');
+    const RESTORE_ERROR_KEYS = {
+        parse: 'restoreErrParse',
+        format: 'restoreErrFormat',
+        version: 'restoreErrVersion',
+        quota: 'restoreErrQuota'
+    };
+
+    document.getElementById('historyRestoreBtn').addEventListener('click', () => {
+        // Clear first so re-picking the same file still fires `change`
+        importFileInput.value = '';
+        importFileInput.click();
+    });
+
+    importFileInput.addEventListener('change', async () => {
+        const file = importFileInput.files && importFileInput.files[0];
+        if (!file) return;
+        const t = getT();
+
+        let text;
+        try {
+            text = await file.text();
+        } catch {
+            alert(t.restoreErrRead);
+            return;
+        }
+
+        const parsed = parseBackup(text);
+        if (!parsed.ok) {
+            alert(t[RESTORE_ERROR_KEYS[parsed.error]] || t.restoreErrFormat);
+            return;
+        }
+        if (parsed.records.length === 0) {
+            alert(t.restoreEmpty);
+            return;
+        }
+        if (!confirm(t.restoreConfirm.replace('%N%', parsed.records.length))) return;
+
+        const result = mergeHistory(parsed.records);
+        if (!result.ok) {
+            alert(t[RESTORE_ERROR_KEYS[result.error]] || t.restoreErrQuota);
+            return;
+        }
+
+        const lines = [t.restoreDone
+            .replace('%ADDED%', result.added)
+            .replace('%SKIPPED%', result.skipped)];
+        if (parsed.dropped > 0) lines.push(t.restoreDropped.replace('%N%', parsed.dropped));
+        if (result.trimmed > 0) lines.push(t.restoreTrimmed.replace('%N%', result.trimmed));
+        alert(lines.join('\n'));
+
+        renderHistoryTable();
+    });
+
     document.getElementById('historyClearBtn').addEventListener('click', () => {
         const t = getT();
         if (!confirm(t.historyConfirmClear)) return;

@@ -1,7 +1,13 @@
-// history.js - Calculation history storage and CSV export
+// history.js - Calculation history storage, CSV export, JSON backup/restore
 
 const STORAGE_KEY = 'tdm_history';
 const MAX_RECORDS = 1000;
+
+// JSON backup envelope. CSV is a lossy report format (measurements collapse to
+// a count, regimens to a prose string); this keeps records verbatim so a backup
+// can actually be restored — including on a different device.
+const BACKUP_FORMAT = 'simpletdm-backup';
+const BACKUP_VERSION = 1;
 
 function newId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -145,18 +151,17 @@ function recordToRow(r, locale) {
     ];
 }
 
-export async function exportToCsv(records, filename = 'tdm_history.csv', lang = 'en') {
-    const locale = CSV_LOCALES[lang] || CSV_LOCALES.en;
-    const header = locale.headers.join(',');
-    const rows = records.map(r => recordToRow(r, locale).map(csvEscape).join(','));
-    const csv = '\uFEFF' + [header, ...rows].join('\r\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const file = new File([blob], filename, { type: 'text/csv;charset=utf-8' });
+/**
+ * Hand a generated file to the user: native share sheet when available,
+ * plain download otherwise. Shared by CSV export and JSON backup.
+ */
+async function deliverFile(blob, filename) {
+    const file = new File([blob], filename, { type: blob.type });
 
     // On mobile, the OS share sheet surfaces KakaoTalk (and other messaging
     // apps) as a target. Kakao has no public web-SDK for sending files, so
     // routing through the native share sheet is the only viable path.
+    // It doubles as the phone -> PC transfer path for backups.
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
             await navigator.share({ files: [file], title: filename, text: filename });
@@ -176,4 +181,104 @@ export async function exportToCsv(records, filename = 'tdm_history.csv', lang = 
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+export async function exportToCsv(records, filename = 'tdm_history.csv', lang = 'en') {
+    const locale = CSV_LOCALES[lang] || CSV_LOCALES.en;
+    const header = locale.headers.join(',');
+    const rows = records.map(r => recordToRow(r, locale).map(csvEscape).join(','));
+    const csv = '\uFEFF' + [header, ...rows].join('\r\n');
+
+    await deliverFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), filename);
+}
+
+// =====================================================
+// JSON backup / restore
+// =====================================================
+
+export function buildBackup(records, exportedAt = new Date().toISOString()) {
+    return {
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        exportedAt,
+        recordCount: records.length,
+        records
+    };
+}
+
+export async function exportToJson(records, filename = 'tdm_backup.json') {
+    const json = JSON.stringify(buildBackup(records), null, 2);
+    await deliverFile(new Blob([json], { type: 'application/json' }), filename);
+}
+
+/**
+ * Parse and validate a backup file's contents.
+ * Returns { ok: true, records, dropped } or { ok: false, error }.
+ * `error` is a code, not a message — the caller localizes it.
+ * Individual malformed records are dropped rather than failing the whole
+ * import, so one corrupt entry can't cost the user the other 999.
+ */
+export function parseBackup(text) {
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        return { ok: false, error: 'parse' };
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        return { ok: false, error: 'format' };
+    }
+    if (data.format !== BACKUP_FORMAT) return { ok: false, error: 'format' };
+    // Older backups stay readable; a newer file may carry fields we'd silently
+    // discard, so refuse it instead of quietly degrading the user's data.
+    if (typeof data.version !== 'number' || data.version > BACKUP_VERSION) {
+        return { ok: false, error: 'version' };
+    }
+    if (!Array.isArray(data.records)) return { ok: false, error: 'format' };
+
+    const records = [];
+    let dropped = 0;
+    for (const r of data.records) {
+        if (!r || typeof r !== 'object' || Array.isArray(r)) { dropped++; continue; }
+        if (isNaN(new Date(r.timestamp).getTime())) { dropped++; continue; }
+        // A record with no usable id would defeat duplicate detection
+        records.push(typeof r.id === 'string' && r.id ? r : { ...r, id: newId() });
+    }
+    return { ok: true, records, dropped };
+}
+
+/**
+ * Merge imported records into stored history, skipping ids already present.
+ * Existing records are never overwritten or dropped; the only loss case is the
+ * MAX_RECORDS trim, which is reported back so the caller can warn about it.
+ */
+export function mergeHistory(incoming) {
+    const history = getHistory();
+    const seen = new Set(history.map(r => r.id));
+    let added = 0;
+    let skipped = 0;
+
+    for (const record of incoming) {
+        if (seen.has(record.id)) { skipped++; continue; }
+        seen.add(record.id);
+        history.push(record);
+        added++;
+    }
+
+    history.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    let trimmed = 0;
+    if (history.length > MAX_RECORDS) {
+        trimmed = history.length - MAX_RECORDS;
+        history.splice(0, trimmed);
+    }
+
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch {
+        // Quota exceeded — localStorage keeps its previous contents, so the
+        // stored history survives intact and only the import is lost.
+        return { ok: false, error: 'quota' };
+    }
+    return { ok: true, added, skipped, trimmed };
 }

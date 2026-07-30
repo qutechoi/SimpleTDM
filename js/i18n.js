@@ -174,7 +174,20 @@ export const translations = {
         historyLoad: 'Load',
         historyConfirmLoad: 'Load this record into the form? Current input values will be overwritten.',
         historySelectTitle: 'Load from History',
-        historySelectHint: 'Pick a record below to restore it into the form.'
+        historySelectHint: 'Pick a record below to restore it into the form.',
+        historyBackup: 'Backup (JSON)',
+        historyRestore: 'Restore',
+        historyNothingToBackup: 'No records to back up.',
+        restoreConfirm: 'Restore %N% record(s) from this backup?\nExisting records are kept and duplicates are skipped.',
+        restoreDone: 'Restore complete — %ADDED% added, %SKIPPED% already present.',
+        restoreEmpty: 'This backup contains no usable records.',
+        restoreDropped: '%N% invalid record(s) were skipped.',
+        restoreTrimmed: 'Oldest %N% record(s) were removed to stay within the 1000-record limit.',
+        restoreErrRead: 'Could not read the file.',
+        restoreErrParse: 'This is not a valid JSON file.\nCSV exports cannot be restored — use a JSON backup file.',
+        restoreErrFormat: 'This is not a SimpleTDM backup file.\nCSV exports cannot be restored — use a JSON backup file.',
+        restoreErrVersion: 'This backup was created by a newer version of the app. Please update first.',
+        restoreErrQuota: 'Not enough browser storage to restore. Delete some records and try again.'
     },
     ko: {
         title: '반코마이신 TDM 계산기',
@@ -349,7 +362,20 @@ export const translations = {
         historyLoad: '불러오기',
         historyConfirmLoad: '이 기록을 폼에 불러오시겠습니까? 현재 입력값이 덮어씌워집니다.',
         historySelectTitle: '기록에서 불러오기',
-        historySelectHint: '아래 기록 중 폼에 복원할 항목을 선택하세요.'
+        historySelectHint: '아래 기록 중 폼에 복원할 항목을 선택하세요.',
+        historyBackup: 'JSON 백업',
+        historyRestore: '복원',
+        historyNothingToBackup: '백업할 기록이 없습니다.',
+        restoreConfirm: '이 백업에서 %N%건을 복원하시겠습니까?\n기존 기록은 유지되며 중복된 기록은 건너뜁니다.',
+        restoreDone: '복원 완료 — %ADDED%건 추가, %SKIPPED%건은 이미 있습니다.',
+        restoreEmpty: '이 백업에는 사용할 수 있는 기록이 없습니다.',
+        restoreDropped: '형식이 잘못된 %N%건은 제외했습니다.',
+        restoreTrimmed: '기록 한도(1000건)를 넘어 오래된 %N%건을 삭제했습니다.',
+        restoreErrRead: '파일을 읽을 수 없습니다.',
+        restoreErrParse: '올바른 JSON 파일이 아닙니다.\nCSV 내보내기 파일은 복원할 수 없습니다 — JSON 백업 파일을 사용하세요.',
+        restoreErrFormat: 'SimpleTDM 백업 파일이 아닙니다.\nCSV 내보내기 파일은 복원할 수 없습니다 — JSON 백업 파일을 사용하세요.',
+        restoreErrVersion: '더 새로운 버전에서 만든 백업입니다. 앱을 먼저 업데이트해 주세요.',
+        restoreErrQuota: '브라우저 저장 공간이 부족해 복원하지 못했습니다. 기록을 일부 삭제한 뒤 다시 시도하세요.'
     }
 };
 
