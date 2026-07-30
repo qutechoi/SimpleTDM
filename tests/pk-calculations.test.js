@@ -13,6 +13,8 @@ import {
     calculateHalfLife,
     calculatePopulationPK,
     predictConcentration,
+    enumerateDoses,
+    enumerateSchedule,
     isPediatric,
     calculateSchwartzCrCl,
     calculateVdPopPediatric,
@@ -203,6 +205,83 @@ assertRange(conc30h, 27, 33, 'Multi-regimen: t=30h reflects new 1500mg dose');
 //   C = (1500/49) + (1000/49)*[exp(-0.065*24) + exp(-0.065*12)] ≈ 44.3
 const conc24h = predictConcentration(0.065, 49, multiRegimens, startTimeB);
 assertRange(conc24h, 42, 46, 'Multi-regimen: switch boundary includes new dose');
+
+// =====================================================
+// Test Suite: Held / Missed Doses
+// =====================================================
+console.log('\n=== Held / Missed Doses ===');
+
+// Baseline: 1000mg q12h from t=0, enumerated through t=48h → doses at 0/12/24/36/48
+const heldStart = new Date('2024-01-01T08:00');
+const heldUntil = new Date(heldStart.getTime() + 48 * 3600000);
+const baseRegimen = [{ dose: 1000, interval: 12, startTime: heldStart }];
+assertEqual(enumerateDoses(baseRegimen, heldUntil).length, 5, 0, 'Baseline enumerates 5 doses');
+
+// A regimen with no `skips` field behaves exactly as before (regression guard)
+const emptySkips = [{ dose: 1000, interval: 12, startTime: heldStart, skips: [] }];
+assertEqual(
+    predictConcentration(0.065, 49, emptySkips, heldUntil),
+    predictConcentration(0.065, 49, baseRegimen, heldUntil),
+    1e-9,
+    'Empty skips identical to undefined skips'
+);
+
+// Single held dose: the 4th dose (index 3, t=36h) is not given
+const oneSkip = [{ dose: 1000, interval: 12, startTime: heldStart, skips: [3] }];
+const oneSkipDoses = enumerateDoses(oneSkip, heldUntil);
+assertEqual(oneSkipDoses.length, 4, 0, 'One held dose removes exactly one dose');
+assertTrue(
+    !oneSkipDoses.some(d => d.time.getTime() === heldStart.getTime() + 36 * 3600000),
+    'Held dose is absent from the dose list'
+);
+
+// The schedule does NOT shift: the dose after a hold still lands on the original clock time
+assertTrue(
+    oneSkipDoses.some(d => d.time.getTime() === heldStart.getTime() + 48 * 3600000),
+    'Dose following a hold keeps its original time'
+);
+
+// Concentration drops by exactly the missing dose's residual contribution:
+//   (1000/49) * exp(-0.065 * 12) ≈ 9.356 mg/L at t=48h
+const concNoSkip = predictConcentration(0.065, 49, baseRegimen, heldUntil);
+const concOneSkip = predictConcentration(0.065, 49, oneSkip, heldUntil);
+assertEqual(
+    concNoSkip - concOneSkip,
+    (1000 / 49) * Math.exp(-0.065 * 12),
+    1e-9,
+    'Held dose removes exactly its superposition term'
+);
+
+// Two consecutive held doses (indices 2 and 3 → t=24h and t=36h)
+const twoSkips = [{ dose: 1000, interval: 12, startTime: heldStart, skips: [2, 3] }];
+assertEqual(enumerateDoses(twoSkips, heldUntil).length, 3, 0, 'Two consecutive holds remove two doses');
+
+// Out-of-range skip indices are ignored rather than shifting the schedule
+const badSkips = [{ dose: 1000, interval: 12, startTime: heldStart, skips: [99, -1] }];
+assertEqual(
+    predictConcentration(0.065, 49, badSkips, heldUntil),
+    concNoSkip,
+    1e-9,
+    'Out-of-range skip indices are ignored'
+);
+
+// Hold combined with a regimen change: 1000mg q12h (2nd dose held), then 1500mg q12h at t=24h
+const heldMultiRegimens = [
+    { dose: 1000, interval: 12, startTime: startTimeA, skips: [1] },
+    { dose: 1500, interval: 12, startTime: startTimeB }
+];
+const heldSchedule = enumerateSchedule(heldMultiRegimens, new Date(startTimeA.getTime() + 30 * 3600000));
+assertEqual(heldSchedule.length, 3, 0, 'Schedule keeps held slots (t=0/12 from regimen 1, t=24 from regimen 2)');
+assertEqual(heldSchedule.filter(s => s.skipped).length, 1, 0, 'Exactly one slot flagged as held');
+assertTrue(
+    heldSchedule.filter(s => s.skipped)[0].regimenIndex === 0,
+    'Held slot is attributed to the regimen that generated it'
+);
+
+// At t=18h only the t=0 dose was actually given (t=12h was held):
+//   C = (1000/49) * exp(-0.065*18) ≈ 6.33
+const heldConc18h = predictConcentration(0.065, 49, heldMultiRegimens, t18h);
+assertRange(heldConc18h, 5.5, 7.0, 'Hold + regimen change: t=18h reflects only the first dose');
 
 // =====================================================
 // Test Suite: Clinical Scenarios

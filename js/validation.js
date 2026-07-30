@@ -1,6 +1,7 @@
 // validation.js - Input Validation Module
 
 import { translations, getLang } from './i18n.js';
+import { enumerateSchedule } from './pk-calculations.js';
 
 export const validationRules = {
     ageYears:  { min: 0,   max: 120, key: 'valAgeRange' },
@@ -75,8 +76,9 @@ export function validateField(input, ruleName) {
  *
  * @param {Object} inputs - patient demographic input elements
  * @param {Array}  [regimens] - parsed regimens for cross-cutting clinical warnings
+ * @param {Array}  [measurements] - parsed samples, for held-dose proximity warnings
  */
-export function validateAllInputs(inputs, regimens) {
+export function validateAllInputs(inputs, regimens, measurements) {
     const t = translations[getLang()];
     let valid = true;
     const warnings = [];
@@ -128,6 +130,16 @@ export function validateAllInputs(inputs, regimens) {
     const scr = parseFloat(inputs.scr.value);
     if (!neonatal && ((ageYears > 85) || (weight && weight > 150) || (scr && scr < 0.4))) {
         warnings.push(t.valCrclWarning);
+    }
+
+    // A dose held shortly before the level was drawn leaves the fit leaning on a
+    // disturbed stretch of the curve — flag it so an extra level can be considered.
+    if (regimens && regimens.length > 0 && measurements && measurements.length > 0) {
+        const lastSample = measurements[measurements.length - 1].time;
+        const held = enumerateSchedule(regimens, lastSample).filter(s => s.skipped);
+        const heldNearSample = held.some(s =>
+            (lastSample.getTime() - s.time.getTime()) <= 24 * 3600000);
+        if (heldNearSample) warnings.push(t.valHeldNearSample);
     }
 
     // Neonatal-specific clinical advisories

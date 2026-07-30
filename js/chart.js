@@ -1,7 +1,7 @@
 // chart.js - Chart Rendering Module
 
 import { getLang, t as getT } from './i18n.js';
-import { enumerateDoses } from './pk-calculations.js';
+import { enumerateDoses, enumerateSchedule } from './pk-calculations.js';
 
 let pkChart = null;
 
@@ -119,6 +119,31 @@ export function updateChartExtended(peakSS, kel, vd, regimens, measurements, cur
         showLine: false,
         borderWidth: 2
     });
+
+    // Held / missed dose markers — placed on the curve where a dose was skipped
+    const heldSlots = enumerateSchedule(regimens, chartEndTime).filter(s => s.skipped);
+    if (heldSlots.length > 0) {
+        const heldData = timePoints.map(() => null);
+        heldSlots.forEach(slot => {
+            const heldHours = (slot.time - firstStart) / (1000 * 60 * 60);
+            let closestIdx = 0, closestDist = Infinity;
+            timePoints.forEach((tp, idx) => {
+                const dist = Math.abs(parseFloat(tp) - heldHours);
+                if (dist < closestDist) { closestDist = dist; closestIdx = idx; }
+            });
+            if (closestDist < 0.5) heldData[closestIdx] = concentrations[closestIdx];
+        });
+        datasets.push({
+            label: lang === 'en' ? 'Held dose' : '투약 누락',
+            data: heldData,
+            borderColor: '#64748b',
+            backgroundColor: 'transparent',
+            pointRadius: 8,
+            pointStyle: 'crossRot',
+            showLine: false,
+            borderWidth: 2
+        });
+    }
 
     // Regimen change markers — diamond points placed on the curve at each change time
     if (regimens.length > 1) {

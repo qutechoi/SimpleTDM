@@ -166,10 +166,15 @@
                         <div id="regimensContainer">
                             <!-- Dynamic regimen entries are inserted here by JavaScript -->
                         </div>
-                        <button type="button" id="addRegimenBtn" class="btn-secondary" data-i18n="addRegimen">
-                            + Add Regimen
-                        </button>
-                        <small class="hint regimen-hint" data-i18n="regimenHint">Add a new regimen if dose or interval changed mid-treatment.</small>
+                        <div class="regimen-actions">
+                            <button type="button" id="addRegimenBtn" class="btn-secondary" data-i18n="addRegimen">
+                                + Add Regimen
+                            </button>
+                            <button type="button" id="resumeRegimenBtn" class="btn-secondary" data-i18n="resumeRegimen">
+                                + Resume Same Regimen
+                            </button>
+                        </div>
+                        <small class="hint regimen-hint" data-i18n="regimenHint">Add a new regimen if dose or interval changed mid-treatment. Use "Resume Same Regimen" if dosing restarted off-schedule after a hold.</small>
                     </div>
 
                     <!-- Monitoring -->

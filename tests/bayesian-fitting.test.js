@@ -218,6 +218,48 @@ assertRange(multiResult.fitQuality.rSquared, 0.8, 1.0, 'Multi-regimen R² > 0.8'
 assertRange(multiResult.fitQuality.rmse, 0, 3, 'Multi-regimen RMSE < 3 mg/L');
 
 // =====================================================
+// Test Suite: Held Dose + Regimen Change (end-to-end)
+// =====================================================
+console.log('\n=== Held Dose + Regimen Change ===');
+
+// The scenario this feature exists for: 1000mg q12h, the 4th dose (t=36h) is held,
+// then the regimen changes to 750mg q12h at t=60h. Levels drawn at t=47.5h and 71.5h.
+const hoursFromStart = n => new Date(startTime.getTime() + n * 3600000);
+
+const heldRegimens = [
+    { dose: 1000, interval: 12, startTime, skips: [3] },
+    { dose: 750, interval: 12, startTime: hoursFromStart(60) }
+];
+// Same history as the user would enter if the held dose were NOT declared
+const undeclaredRegimens = [
+    { dose: 1000, interval: 12, startTime },
+    { dose: 750, interval: 12, startTime: hoursFromStart(60) }
+];
+
+const heldMeasurements = [47.5, 71.5].map(x => ({
+    time: hoursFromStart(x),
+    concentration: predictConcentration(kelTrue, vdTrue, heldRegimens, hoursFromStart(x))
+}));
+
+const heldFit = multiPointBayesianFit({ regimens: heldRegimens }, heldMeasurements, populationPK);
+const undeclaredFit = multiPointBayesianFit({ regimens: undeclaredRegimens }, heldMeasurements, populationPK);
+
+assertRange(heldFit.kel, 0.058, 0.072, 'Declared hold: Kel recovered near true value');
+assertRange(heldFit.vd, 45, 54, 'Declared hold: Vd recovered near true value');
+assertRange(heldFit.fitQuality.rSquared, 0.95, 1.0, 'Declared hold: R² > 0.95');
+
+// Leaving the hold undeclared makes the model expect a dose that was never given,
+// so the fitter inflates clearance to explain the lower observed levels.
+assertTrue(
+    Math.abs(heldFit.vd - vdTrue) < Math.abs(undeclaredFit.vd - vdTrue),
+    'Declaring the hold gives a better Vd estimate than omitting it'
+);
+assertTrue(
+    undeclaredFit.cl > heldFit.cl * 1.3,
+    'Omitting the hold materially overestimates clearance'
+);
+
+// =====================================================
 // Summary
 // =====================================================
 console.log('\n' + '='.repeat(50));

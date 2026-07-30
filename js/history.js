@@ -56,7 +56,8 @@ const CSV_LOCALES = {
         sex: { male: 'male', female: 'female' },
         pediatric: { true: 'yes', false: 'no' },
         effectiveness: { good: 'Good', low: 'Low' },
-        toxicity: { low: 'Low', high: 'High' }
+        toxicity: { low: 'Low', high: 'High' },
+        heldLabel: 'held'
     },
     ko: {
         headers: [
@@ -70,7 +71,8 @@ const CSV_LOCALES = {
         sex: { male: '남', female: '여' },
         pediatric: { true: '소아', false: '성인' },
         effectiveness: { good: '양호', low: '저하' },
-        toxicity: { low: '낮음', high: '위험' }
+        toxicity: { low: '낮음', high: '위험' },
+        heldLabel: '누락'
     }
 };
 
@@ -82,6 +84,25 @@ function assessEffectiveness(auc24) {
 function assessToxicity(auc24, trough) {
     if (!isFinite(auc24) || !isFinite(trough)) return null;
     return (auc24 > 600 || trough > 20) ? 'high' : 'low';
+}
+
+/**
+ * Render a regimen's held doses as clock times, e.g. "held: 5/13 08:00, 5/13 20:00".
+ * Times are derived from start + index × interval, matching enumerateSchedule().
+ */
+function formatSkips(regimen, label) {
+    if (!Array.isArray(regimen.skips) || regimen.skips.length === 0) return '';
+    const start = new Date(regimen.startTime).getTime();
+    if (isNaN(start)) return '';
+    const pad = n => String(n).padStart(2, '0');
+    const times = regimen.skips
+        .slice()
+        .sort((a, b) => a - b)
+        .map(n => {
+            const d = new Date(start + n * regimen.interval * 3600000);
+            return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        });
+    return ` (${label}: ${times.join(', ')})`;
 }
 
 function csvEscape(value) {
@@ -103,7 +124,7 @@ function recordToRow(r, locale) {
     const first = regimens[0] || {};
     const last = regimens[regimens.length - 1] || {};
     const regimensSummary = regimens
-        .map(g => `${g.dose}mg q${g.interval}h @${g.startTime}`)
+        .map(g => `${g.dose}mg q${g.interval}h @${g.startTime}${formatSkips(g, locale.heldLabel)}`)
         .join(' | ');
     const effKey = assessEffectiveness(res.auc24);
     const toxKey = assessToxicity(res.auc24, res.trough);

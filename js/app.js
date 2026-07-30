@@ -3,7 +3,7 @@
 import { getLang, setLang, t as getT, applyLanguage } from './i18n.js';
 import {
     calculatePopulationPK, calculatePeakSS, calculateTroughSS, calculateAUC24,
-    calculatePMA, recommendNeonatalInitialDose
+    calculatePMA, recommendNeonatalInitialDose, enumerateSchedule
 } from './pk-calculations.js';
 import { multiPointBayesianFit } from './bayesian-fitting.js';
 import { updateChartExtended, updateChartTheme, updateChartLanguage } from './chart.js';
@@ -189,12 +189,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     <input type="datetime-local" class="regimen-start" required>
                 </div>
             </div>
+            <div class="regimen-schedule" style="display:none;">
+                <button type="button" class="schedule-toggle" aria-expanded="false">
+                    <span class="schedule-caret">▶</span>
+                    <span class="schedule-title">${t.scheduleTitle}</span>
+                    <span class="schedule-count"></span>
+                    <span class="schedule-skip-badge" style="display:none;"></span>
+                </button>
+                <div class="schedule-body" style="display:none;">
+                    <small class="hint schedule-hint">${t.scheduleHint}</small>
+                    <div class="schedule-chips"></div>
+                    <small class="schedule-warning" style="display:none;"></small>
+                </div>
+            </div>
         `;
 
         const removeBtn = entry.querySelector('.btn-remove');
         if (removeBtn) {
             removeBtn.addEventListener('click', () => removeRegimen(index));
         }
+
+        const toggle = entry.querySelector('.schedule-toggle');
+        toggle.addEventListener('click', () => {
+            const open = toggle.getAttribute('aria-expanded') === 'true';
+            toggle.setAttribute('aria-expanded', String(!open));
+            entry.querySelector('.schedule-body').style.display = open ? 'none' : 'block';
+        });
 
         // Real-time validation on dose/interval (start time validated at calculate-time
         // because order depends on sibling regimens)
@@ -213,6 +233,24 @@ document.addEventListener('DOMContentLoaded', () => {
         container.appendChild(entry);
         entry.classList.add('highlight');
         setTimeout(() => entry.classList.remove('highlight'), 1000);
+        renderRegimenSchedules();
+        return entry;
+    }
+
+    /**
+     * Clone the last regimen's dose/interval into a new entry, leaving the start
+     * time blank. For dosing that resumed off-schedule after a held dose.
+     */
+    function resumeRegimen() {
+        const container = document.getElementById('regimensContainer');
+        const entries = container.querySelectorAll('.regimen-entry');
+        const last = entries[entries.length - 1];
+        const added = addRegimen();
+        if (last) {
+            added.querySelector('.regimen-dose').value = last.querySelector('.regimen-dose').value;
+            added.querySelector('.regimen-interval').value = last.querySelector('.regimen-interval').value;
+        }
+        added.querySelector('.regimen-start').focus();
     }
 
     function removeRegimen(index) {
@@ -221,6 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (entries.length > 1) {
             entries[index].remove();
             reindexRegimens();
+            renderRegimenSchedules();
         }
     }
 
@@ -253,22 +292,134 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function collectRegimens() {
-        const entries = document.querySelectorAll('#regimensContainer .regimen-entry');
-        const regimens = [];
-        entries.forEach(entry => {
+    // ==========================================
+    // Held / Missed Dose Tracking
+    // ==========================================
+    // Held doses are stored on the regimen entry as 0-based dose ordinals
+    // (`data-skips="2,3"`). Indices survive small edits to the start time, which
+    // timestamps would not — "the 3rd dose was held" stays true either way.
+
+    const MAX_SCHEDULE_CHIPS = 200;
+
+    function readSkips(entry) {
+        return (entry.dataset.skips || '')
+            .split(',')
+            .map(s => parseInt(s, 10))
+            .filter(n => Number.isInteger(n) && n >= 0);
+    }
+
+    function writeSkips(entry, skips) {
+        entry.dataset.skips = [...new Set(skips)].sort((a, b) => a - b).join(',');
+    }
+
+    function formatDoseTime(d) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    /**
+     * Parse every complete regimen entry, keeping a reference back to its DOM node
+     * so the generated schedule can be rendered into the right card.
+     * Sorted by start time — the order enumerateSchedule() expects.
+     */
+    function collectRegimenEntries() {
+        const parsed = [];
+        document.querySelectorAll('#regimensContainer .regimen-entry').forEach(entry => {
             const dose = parseFloat(entry.querySelector('.regimen-dose').value);
             const interval = parseFloat(entry.querySelector('.regimen-interval').value);
             const startStr = entry.querySelector('.regimen-start').value;
-            if (dose && interval && startStr) {
-                regimens.push({
-                    dose,
-                    interval,
-                    startTime: new Date(startStr)
-                });
+            if (!dose || !interval || !startStr) return;
+            const startTime = new Date(startStr);
+            if (isNaN(startTime.getTime())) return;
+            parsed.push({ entry, dose, interval, startTime, skips: readSkips(entry) });
+        });
+        return parsed.sort((a, b) => a.startTime - b.startTime);
+    }
+
+    function collectRegimens() {
+        return collectRegimenEntries().map(({ dose, interval, startTime, skips }) =>
+            ({ dose, interval, startTime, skips }));
+    }
+
+    /**
+     * How far the schedule preview runs: only doses that have already happened can
+     * have been held, so bound at "now" — extended to the last sample if that is later.
+     */
+    function scheduleUpperBound(regimens) {
+        let boundMs = Date.now();
+        const measurements = collectMeasurements();
+        if (measurements.length > 0) {
+            boundMs = Math.max(boundMs, measurements[measurements.length - 1].time.getTime());
+        }
+        if (regimens.length > 0) {
+            // Keep a future-dated regimen visible so its first dose can still be marked
+            boundMs = Math.max(boundMs, regimens[regimens.length - 1].startTime.getTime());
+        }
+        return new Date(boundMs);
+    }
+
+    function renderRegimenSchedules() {
+        const parsed = collectRegimenEntries();
+
+        // Incomplete entries have nothing to show yet
+        document.querySelectorAll('#regimensContainer .regimen-entry').forEach(entry => {
+            if (!parsed.some(p => p.entry === entry)) {
+                entry.querySelector('.regimen-schedule').style.display = 'none';
             }
         });
-        return regimens.sort((a, b) => a.startTime - b.startTime);
+        if (parsed.length === 0) return;
+
+        const regimens = parsed.map(({ dose, interval, startTime, skips }) =>
+            ({ dose, interval, startTime, skips }));
+        const slots = enumerateSchedule(regimens, scheduleUpperBound(regimens));
+
+        parsed.forEach((p, i) => renderScheduleFor(p, slots.filter(s => s.regimenIndex === i)));
+    }
+
+    function renderScheduleFor(parsedRegimen, slots) {
+        const t = getT();
+        const { entry, skips } = parsedRegimen;
+        const box = entry.querySelector('.regimen-schedule');
+
+        if (slots.length === 0) {
+            box.style.display = 'none';
+            return;
+        }
+        box.style.display = 'block';
+
+        // Drop markers past the end of the schedule — e.g. the interval was lengthened,
+        // so the dose that used to be #6 no longer exists.
+        const pruned = skips.filter(n => n < slots.length);
+        if (pruned.length !== skips.length) writeSkips(entry, pruned);
+
+        const skipCount = slots.filter(s => s.skipped).length;
+        box.querySelector('.schedule-title').textContent = t.scheduleTitle;
+        box.querySelector('.schedule-hint').textContent = t.scheduleHint;
+        box.querySelector('.schedule-count').textContent =
+            t.scheduleCount.replace('%N%', slots.length);
+
+        const badge = box.querySelector('.schedule-skip-badge');
+        badge.textContent = t.scheduleSkipped.replace('%N%', skipCount);
+        badge.style.display = skipCount > 0 ? '' : 'none';
+
+        const chipsEl = box.querySelector('.schedule-chips');
+        const warnEl = box.querySelector('.schedule-warning');
+
+        if (slots.length > MAX_SCHEDULE_CHIPS) {
+            chipsEl.innerHTML = '';
+            warnEl.textContent = t.scheduleTooLong.replace('%N%', slots.length);
+            warnEl.style.display = '';
+            return;
+        }
+
+        warnEl.style.display = 'none';
+        chipsEl.innerHTML = slots.map(s => `
+            <button type="button" class="schedule-chip${s.skipped ? ' is-skipped' : ''}"
+                    data-dose-index="${s.doseIndex}" aria-pressed="${s.skipped}">
+                <span class="chip-num">#${s.doseIndex + 1}</span>
+                <span class="chip-time">${formatDoseTime(s.time)}</span>
+            </button>
+        `).join('');
     }
 
     // ==========================================
@@ -409,14 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const firstRegimen = regimens[0];
         const lastRegimen = regimens[regimens.length - 1];
 
-        // Clinical warnings (now with regimens, e.g. unusual mg/kg dose)
-        const { warnings } = validateAllInputs(inputs, regimens);
-        if (warnings.length > 0) {
-            const proceed = confirm(warnings.join('\n') + '\n\n' +
-                (lang === 'en' ? 'Do you want to proceed?' : '계속 진행하시겠습니까?'));
-            if (!proceed) return;
-        }
-
         const measurements = collectMeasurements();
         if (measurements.length === 0) {
             alert(t.noMeasurements);
@@ -430,6 +573,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     : '모든 채혈 시간은 첫 투약 시간 이후여야 합니다!');
                 return;
             }
+        }
+
+        // Clinical warnings (now with regimens and samples, e.g. unusual mg/kg dose,
+        // or a dose held right before the level was drawn)
+        const { warnings } = validateAllInputs(inputs, regimens, measurements);
+        if (warnings.length > 0) {
+            const proceed = confirm(warnings.join('\n') + '\n\n' +
+                (lang === 'en' ? 'Do you want to proceed?' : '계속 진행하시겠습니까?'));
+            if (!proceed) return;
         }
 
         // Population PK (patient-level, regimen-independent)
@@ -483,7 +635,8 @@ document.addEventListener('DOMContentLoaded', () => {
             regimens: regimens.map(r => ({
                 dose: r.dose,
                 interval: r.interval,
-                startTime: r.startTime.toISOString()
+                startTime: r.startTime.toISOString(),
+                skips: r.skips || []
             })),
             measurements: measurements.map(m => ({
                 time: m.time.toISOString(),
@@ -754,7 +907,8 @@ document.addEventListener('DOMContentLoaded', () => {
             data.regimens.push({
                 dose: entry.querySelector('.regimen-dose').value,
                 interval: entry.querySelector('.regimen-interval').value,
-                startTime: entry.querySelector('.regimen-start').value
+                startTime: entry.querySelector('.regimen-start').value,
+                skips: readSkips(entry)
             });
         });
 
@@ -813,6 +967,8 @@ document.addEventListener('DOMContentLoaded', () => {
             entry.querySelector('.regimen-dose').value = r.dose ?? '';
             entry.querySelector('.regimen-interval').value = r.interval ?? '';
             entry.querySelector('.regimen-start').value = isoToDatetimeLocal(r.startTime);
+            // Records saved before held-dose support carry no `skips`
+            writeSkips(entry, Array.isArray(r.skips) ? r.skips : []);
         });
 
         const measurements = record.measurements || [];
@@ -828,6 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         updateAgeModeUi();
+        renderRegimenSchedules();
     }
 
     function resetPatientData() {
@@ -852,6 +1009,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('recommendationText').textContent = t.recommendationPlaceholder;
 
         updateAgeModeUi();
+        renderRegimenSchedules();
     }
 
     // ==========================================
@@ -902,9 +1060,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Backward compat: pre-multi-regimen records used `r.dosing`
             const regimens = r.regimens || (r.dosing ? [r.dosing] : []);
             const last = regimens[regimens.length - 1] || {};
-            const regimenLabel = regimens.length > 1
-                ? `${last.dose}mg q${last.interval}h (×${regimens.length})`
-                : `${last.dose}mg q${last.interval}h`;
+            const heldCount = regimens.reduce((n, g) => n + (g.skips ? g.skips.length : 0), 0);
+            const notes = [
+                regimens.length > 1 ? `×${regimens.length}` : null,
+                heldCount > 0 ? t.scheduleSkipped.replace('%N%', heldCount) : null
+            ].filter(Boolean);
+            const regimenLabel = `${last.dose}mg q${last.interval}h`
+                + (notes.length > 0 ? ` (${notes.join(', ')})` : '');
             let ageLabel;
             if (p.neonate) {
                 ageLabel = `${p.gaWeeks}w GA / ${p.pnaDays}d PNA`;
@@ -996,7 +1158,35 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Event Listeners
+    const regimensContainer = document.getElementById('regimensContainer');
+    const measurementsContainer = document.getElementById('measurementsContainer');
+
+    // Toggle a scheduled dose between "given" and "held"
+    regimensContainer.addEventListener('click', (e) => {
+        const chip = e.target.closest('.schedule-chip');
+        if (!chip) return;
+        const entry = chip.closest('.regimen-entry');
+        const doseIndex = parseInt(chip.dataset.doseIndex, 10);
+        const skips = readSkips(entry);
+        writeSkips(entry, skips.includes(doseIndex)
+            ? skips.filter(n => n !== doseIndex)
+            : [...skips, doseIndex]);
+        renderRegimenSchedules();
+        // Re-rendering replaces the chip element — put focus back so several
+        // doses can be marked in a row from the keyboard
+        const refreshed = entry.querySelector(`.schedule-chip[data-dose-index="${doseIndex}"]`);
+        if (refreshed) refreshed.focus();
+    });
+
+    // Any dose/interval/start-time or sample-time edit reshapes the schedule.
+    // `change` covers browsers that only fire it when a date picker is used.
+    ['input', 'change'].forEach(evt => {
+        regimensContainer.addEventListener(evt, renderRegimenSchedules);
+        measurementsContainer.addEventListener(evt, renderRegimenSchedules);
+    });
+
     document.getElementById('addRegimenBtn').addEventListener('click', addRegimen);
+    document.getElementById('resumeRegimenBtn').addEventListener('click', resumeRegimen);
     document.getElementById('addMeasurementBtn').addEventListener('click', addMeasurement);
     document.getElementById('simulateBtn').addEventListener('click', simulateDose);
     calculateBtn.addEventListener('click', calculateTDM);
@@ -1022,6 +1212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('language', newLang);
         reindexRegimens();
         reindexMeasurements();
+        renderRegimenSchedules();
         updateAgeModeUi();
         updateChartLanguage();
     });

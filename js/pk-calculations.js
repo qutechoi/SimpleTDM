@@ -259,32 +259,64 @@ export function recommendNeonatalInitialDose(pmaWeeks, pnaDays) {
     return { mgPerKg: 10, intervalH: 6 };
 }
 
+/** Defensive cap on generated dose slots (~2.3 years at q4h) — guards against a
+ *  mistyped start time producing an unbounded loop while the user is still typing. */
+export const MAX_DOSE_SLOTS = 5000;
+
 /**
- * Enumerate every individual dose event implied by a sequence of dosing regimens.
- * Each regimen contributes doses at startTime, startTime + interval, ... up to
+ * Enumerate every scheduled dose slot implied by a sequence of dosing regimens,
+ * including slots the patient did not actually receive (held / missed doses).
+ * Each regimen contributes slots at startTime, startTime + interval, ... up to
  * (but not including) the next regimen's startTime, or untilTime for the last.
  *
- * @param {Array<{dose:number, interval:number, startTime:Date}>} regimens
- *     Sorted by startTime, ascending.
+ * A held dose does NOT shift the schedule: the following slot still falls on the
+ * original clock time, matching how a dose is held in practice.
+ *
+ * @param {Array<{dose:number, interval:number, startTime:Date, skips?:number[]}>} regimens
+ *     Sorted by startTime, ascending. `skips` holds 0-based dose ordinals within
+ *     that regimen which were held / missed.
  * @param {Date} untilTime - upper bound for dose times (inclusive)
- * @returns {Array<{time:Date, amount:number}>}
+ * @returns {Array<{time:Date, amount:number, regimenIndex:number, doseIndex:number, skipped:boolean}>}
  */
-export function enumerateDoses(regimens, untilTime) {
-    const doses = [];
+export function enumerateSchedule(regimens, untilTime) {
+    const slots = [];
     const untilMs = untilTime.getTime();
     for (let i = 0; i < regimens.length; i++) {
         const r = regimens[i];
         const intervalMs = r.interval * 3600000;
+        if (!(intervalMs > 0)) continue;
         const endMs = i + 1 < regimens.length
             ? regimens[i + 1].startTime.getTime()
             : Infinity;
+        const skips = new Set(r.skips || []);
         let t = r.startTime.getTime();
-        while (t < endMs && t <= untilMs) {
-            doses.push({ time: new Date(t), amount: r.dose });
+        let doseIndex = 0;
+        while (t < endMs && t <= untilMs && slots.length < MAX_DOSE_SLOTS) {
+            slots.push({
+                time: new Date(t),
+                amount: r.dose,
+                regimenIndex: i,
+                doseIndex,
+                skipped: skips.has(doseIndex)
+            });
             t += intervalMs;
+            doseIndex++;
         }
     }
-    return doses;
+    return slots;
+}
+
+/**
+ * Enumerate the doses the patient actually received — the schedule minus held doses.
+ *
+ * @param {Array<{dose:number, interval:number, startTime:Date, skips?:number[]}>} regimens
+ * @param {Date} untilTime - upper bound for dose times (inclusive)
+ * @returns {Array<{time:Date, amount:number}>}
+ */
+export function enumerateDoses(regimens, untilTime) {
+    return enumerateSchedule(regimens, untilTime)
+        .filter(slot => !slot.skipped)
+        .map(slot => ({ time: slot.time, amount: slot.amount }));
 }
 
 /**
